@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from datetime import datetime
-from sqlalchemy import select, and_, text
+from sqlalchemy import select, and_, or_, text
 from typing import Optional
 import os, json
 
@@ -129,7 +129,7 @@ def readings_query(body: QueryBody):
         rows = db.execute(
             select(Reading, Meter.slot_code, Meter.multiplier, Meter.is_active)
             .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
-            .where(and_(Reading.ts_utc >= start, Reading.ts_utc <= end))
+            .where(and_(Reading.ts_utc >= start, Reading.ts_utc <= end, or_(Meter.status == None, Meter.status == "Activo")))
             .order_by(Reading.gateway_id, Reading.unit_id, Reading.ts_utc)
         ).all()
 

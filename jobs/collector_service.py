@@ -45,6 +45,7 @@ def read_new_rows(path, start_row_exclusive):
                 "timestamp_utc": row.get("timestamp_utc"),
                 "gateway": row.get("gateway"),
                 "unit": to_int(row.get("unit")),
+                "device_uid": (row.get("device_uid") or "").strip() or None,
                 "ok": (str(row.get("ok","")).lower() in ("true","1","yes","y")),
                 "volt_v": to_float(row.get("volt_v")),
                 "current_a": to_float(row.get("current_a")),
