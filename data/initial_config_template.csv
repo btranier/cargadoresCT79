@@ -1,0 +1,4 @@
+gateway_host,gateway_port,unit_id,slot_code,description,phase,status,multiplier,owner_name,parking_slot,is_active,device_uid
+192.168.1.101,502,1,P246,Cargador plaza 246,,Activo,1.0,Nombre Apellido,P246,1,
+192.168.1.101,502,2,P154,Cargador plaza 154,,Activo,1.0,Nombre Apellido,P154,1,
+192.168.1.102,502,1,P301,Cargador plaza 301,,Activo,1.0,Nombre Apellido,P301,1,
