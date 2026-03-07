@@ -303,9 +303,10 @@
                     <th>mid</th>
                     <th>unit_id</th>
                     <th>slot_code</th>
-                    <th>description</th>
-                    <th>phase</th>
+                    <th>owner</th>
+                    <th>parking_slot</th>
                     <th>status</th>
+                    <th>active</th>
                     <th>multiplier</th>
                   </tr>
                 </thead>
@@ -356,6 +357,13 @@
             </div>
           </div>
           <div class="card-b">
+            <div style="margin-bottom:10px;" class="muted">Latest script runs and gateway failures</div>
+            <div class="scroll" style="max-height: 180px; margin-bottom:10px;">
+              <table>
+                <thead><tr><th>run_start</th><th>exit</th><th>inserted</th><th>gateway_failures</th></tr></thead>
+                <tbody id="exec-logs-body"></tbody>
+              </table>
+            </div>
             <div class="scroll" style="max-height: 680px;">
               <pre id="log-output">(select a file)</pre>
             </div>
@@ -369,12 +377,12 @@
       <div class="grid grid-12">
         <div class="card col-9">
           <div class="card-h">
-            <div class="card-title">Energy by slot code (hourly stacked)</div>
+            <div class="card-title">Cumulative consumption by active meter (15 min)</div>
             <div class="row">
               <select id="dash-period">
-                <option value="6h">Last 6 hours</option>
-                <option value="24h" selected>Last 24 hours</option>
-                <option value="7d">Last 7 days</option>
+                <option value="day" selected>Day</option>
+                <option value="week">Week</option>
+                <option value="month">Calendar month</option>
               </select>
               <button class="btn" id="btn-refresh-dashboard">Refresh</button>
             </div>
@@ -385,7 +393,7 @@
               <canvas id="kwhChart"></canvas>
               <div class="hint">
                 Uses <span class="mono">POST /api/readings/query</span> with body:
-                <span class="mono">{ start, end, granularity: \"hour\" }</span>
+                <span class="mono">{ start, end, granularity: \"15min\", only_active: true }</span>
                 (per swagger).
               </div>
             </div>
@@ -445,6 +453,9 @@
                     <th>gateway_id</th>
                     <th>unit_id</th>
                     <th>slot_code</th>
+                    <th>owner</th>
+                    <th>parking</th>
+                    <th>active</th>
                     <th>kwh_import</th>
                     <th>power_kw</th>
                     <th>volt_v</th>
@@ -481,6 +492,21 @@ dit Meter (PATCH MeterEditable) -->
           <div class="field" style="grid-column: 1 / -1;">
             <div class="label">description</div>
             <input id="meter-description" placeholder="e.g. Nacho" />
+          </div>
+          <div class="field">
+            <div class="label">owner_name</div>
+            <input id="meter-owner-name" placeholder="owner" />
+          </div>
+          <div class="field">
+            <div class="label">parking_slot</div>
+            <input id="meter-parking-slot" placeholder="A-12" />
+          </div>
+          <div class="field">
+            <div class="label">is_active</div>
+            <select id="meter-is-active">
+              <option value="1">Active</option>
+              <option value="0">Inactive</option>
+            </select>
           </div>
           <div class="field">
             <div class="label">phase</div>
@@ -549,7 +575,7 @@ dit Meter (PATCH MeterEditable) -->
         btn.classList.add("active");
         const key = btn.dataset.tab;
         Object.entries(views).forEach(([k, v]) => v.style.display = (k === key ? "block" : "none"));
-        if (key === "logs") loadLogFiles();
+        if (key === "logs") { loadLogFiles(); loadExecLogs(); }
         if (key === "dashboard") refreshDashboard();
         if (key === "readings") loadLatestReadings();
       });
@@ -634,17 +660,17 @@ dit Meter (PATCH MeterEditable) -->
 
     async function loadMeters() {
       showError("config-error", "");
-      metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">Loading...</td></tr>`;
+      metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">Loading...</td></tr>`;
       selectedMeter = null;
       btnEditMeter.disabled = true;
 
       if (!selectedGateway) {
-        metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">Select a gateway</td></tr>`;
+        metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">Select a gateway</td></tr>`;
         return;
       }
       const gid = gatewayId(selectedGateway);
       if (gid == null) {
-        metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">Gateway gid missing</td></tr>`;
+        metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">Gateway gid missing</td></tr>`;
         return;
       }
       try {
@@ -665,7 +691,7 @@ dit Meter (PATCH MeterEditable) -->
     function renderMeters() {
       metersBody.innerHTML = "";
       if (!meters.length) {
-        metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">${selectedGateway ? "No meters" : "Select a gateway"}</td></tr>`;
+        metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">${selectedGateway ? "No meters" : "Select a gateway"}</td></tr>`;
         return;
       }
 
@@ -680,11 +706,10 @@ dit Meter (PATCH MeterEditable) -->
           <td class="mono">${escapeHtml(String(mid ?? "-"))}</td>
           <td class="mono">${escapeHtml(String(m.unit_id ?? "-"))}</td>
           <td class="mono">${escapeHtml(String(m.slot_code ?? "-"))}</td>
-          <td title="${escapeAttr(m.description ?? "")}" style="max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${escapeHtml(String(m.description ?? "-"))}
-          </td>
-          <td>${escapeHtml(String(m.phase ?? ""))}</td>
+          <td>${escapeHtml(String(m.owner_name ?? m.description ?? "-"))}</td>
+          <td class="mono">${escapeHtml(String(m.parking_slot ?? m.slot_code ?? "-"))}</td>
           <td>${escapeHtml(String(m.status ?? ""))}</td>
+          <td>${(m.is_active === false || m.is_active === 0) ? "No" : "Yes"}</td>
           <td class="mono">${escapeHtml(String(m.multiplier ?? ""))}</td>
         `;
 
@@ -715,6 +740,9 @@ dit Meter (PATCH MeterEditable) -->
     const phaseEl = document.getElementById("meter-phase");
     const statusEl = document.getElementById("meter-status");
     const multEl = document.getElementById("meter-multiplier");
+    const ownerNameEl = document.getElementById("meter-owner-name");
+    const parkingSlotEl = document.getElementById("meter-parking-slot");
+    const meterIsActiveEl = document.getElementById("meter-is-active");
     const btnCloseMeterModal = document.getElementById("btn-close-meter-modal");
     const btnMeterSave = document.getElementById("btn-meter-save");
 
@@ -729,6 +757,9 @@ dit Meter (PATCH MeterEditable) -->
       descEl.value = m.description ?? "";
       phaseEl.value = m.phase ?? "";
       statusEl.value = m.status ?? "";
+      ownerNameEl.value = m.owner_name ?? "";
+      parkingSlotEl.value = m.parking_slot ?? "";
+      meterIsActiveEl.value = (m.is_active === false || m.is_active === 0) ? "0" : "1";
       multEl.value = (m.multiplier ?? "") === null ? "" : String(m.multiplier ?? "");
       meterBackdrop.style.display = "flex";
     }
@@ -748,6 +779,9 @@ dit Meter (PATCH MeterEditable) -->
         description: emptyToNull(descEl.value),
         phase: emptyToNull(phaseEl.value),
         status: emptyToNull(statusEl.value),
+        owner_name: emptyToNull(ownerNameEl.value),
+        parking_slot: emptyToNull(parkingSlotEl.value),
+        is_active: meterIsActiveEl.value === "1",
         multiplier: (multRaw === "" ? null : (Number.isFinite(multiplier) ? multiplier : null))
       };
 
@@ -775,13 +809,37 @@ dit Meter (PATCH MeterEditable) -->
     const logsFilter = document.getElementById("logs-filter");
     const btnRefreshLogFiles = document.getElementById("btn-refresh-log-files");
     const btnReloadLog = document.getElementById("btn-reload-log");
+    const execLogsBody = document.getElementById("exec-logs-body");
 
-    btnRefreshLogFiles.addEventListener("click", () => loadLogFiles());
+    btnRefreshLogFiles.addEventListener("click", () => { loadLogFiles(); loadExecLogs(); });
     btnReloadLog.addEventListener("click", () => loadLog(selectedLogFile));
     logsPeriod.addEventListener("change", () => { if (selectedLogFile) loadLog(selectedLogFile); });
     logsFilter.addEventListener("input", () => renderLogText());
 
     const tailsByPeriod = { "15m": 600, "1h": 1500, "6h": 6000, "24h": 24000 };
+
+    async function loadExecLogs() {
+      try {
+        const rows = await apiFetch("/api/admin/exec_logs?limit=25");
+        renderExecLogs(rows || []);
+      } catch (_) {
+        execLogsBody.innerHTML = `<tr><td colspan="4" style="color:var(--muted);">No execution logs</td></tr>`;
+      }
+    }
+
+    function renderExecLogs(rows) {
+      execLogsBody.innerHTML = "";
+      if (!rows.length) {
+        execLogsBody.innerHTML = `<tr><td colspan="4" style="color:var(--muted);">No execution logs</td></tr>`;
+        return;
+      }
+      for (const row of rows) {
+        const failures = (row.gateway_failures || []).map(f => f.gateway || "gateway").join(", ");
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td class="mono">${escapeHtml(String(row.run_start_utc || ""))}</td><td>${Number(row.exit_code||0)===0?"OK":"FAIL"}</td><td class="mono">${escapeHtml(String(row.inserted_count ?? "0"))}</td><td style="color:${failures?"#ffb4b4":"inherit"}">${escapeHtml(failures || "-")}</td>`;
+        execLogsBody.appendChild(tr);
+      }
+    }
 
     async function loadLogFiles() {
       showError("logs-error", "");
@@ -878,14 +936,14 @@ dit Meter (PATCH MeterEditable) -->
 
     async function loadLatestReadings() {
       showError("readings-error", "");
-      readingsBody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);">Loading...</td></tr>`;
+      readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">Loading...</td></tr>`;
       try {
         const rows = await apiFetch("/api/readings/latest?limit=500");
         renderReadings(rows || []);
         setApiStatus(true);
       } catch (e) {
         showError("readings-error", e.message || String(e));
-        readingsBody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);">No data</td></tr>`;
+        readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">No data</td></tr>`;
         setApiStatus(false);
       }
     }
@@ -893,7 +951,7 @@ dit Meter (PATCH MeterEditable) -->
     function renderReadings(rows) {
       readingsBody.innerHTML = "";
       if (!rows.length) {
-        readingsBody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);">No rows</td></tr>`;
+        readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">No rows</td></tr>`;
         return;
       }
       for (const r of rows) {
@@ -903,6 +961,9 @@ dit Meter (PATCH MeterEditable) -->
           <td class="mono">${escapeHtml(String(r.gateway_id ?? ""))}</td>
           <td class="mono">${escapeHtml(String(r.unit_id ?? ""))}</td>
           <td class="mono">${escapeHtml(r.slot_code || "")}</td>
+          <td>${escapeHtml(r.owner_name || "")}</td>
+          <td>${escapeHtml(r.parking_slot || "")}</td>
+          <td>${(r.is_active === false || r.is_active === 0) ? "No" : "Yes"}</td>
           <td class="mono">${fmtNum(r.kwh_import)}</td>
           <td class="mono">${fmtNum(r.power_kw)}</td>
           <td class="mono">${fmtNum(r.volt_v)}</td>
@@ -927,13 +988,16 @@ dit Meter (PATCH MeterEditable) -->
 
     function periodToRange(period) {
       const end = new Date();
-      const ms =
-        period === "6h" ? 6 * 3600e3 :
-        period === "24h" ? 24 * 3600e3 :
-        period === "7d" ? 7 * 24 * 3600e3 :
-        24 * 3600e3;
-      const start = new Date(end.getTime() - ms);
-      // swagger QueryBody expects strings; send ISO
+      const start = new Date(end);
+      if (period === "day") {
+        start.setHours(0, 0, 0, 0);
+      } else if (period === "week") {
+        start.setDate(end.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+      } else {
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+      }
       return { start: start.toISOString(), end: end.toISOString() };
     }
 
@@ -978,7 +1042,7 @@ dit Meter (PATCH MeterEditable) -->
 
     async function loadReadings(range) {
       // Swagger QueryBody: { start: string, end: string, granularity: string (default hour) }
-      const body = { start: range.start, end: range.end, granularity: "hour" };
+      const body = { start: range.start, end: range.end, granularity: "15min", only_active: true };
       const data = await apiFetch("/api/readings/query", { method: "POST", body: JSON.stringify(body) });
       // Unknown schema; accept common containers
       return Array.isArray(data) ? data : (data?.readings || data?.rows || data?.data || []);
@@ -1087,7 +1151,7 @@ dit Meter (PATCH MeterEditable) -->
         const range = periodToRange(dashPeriod.value);
         const payload = await apiFetch("/api/readings/query", {
           method: "POST",
-          body: JSON.stringify({ start: range.start, end: range.end, granularity: "hour" })
+          body: JSON.stringify({ start: range.start, end: range.end, granularity: "15min", only_active: true })
         });
         renderDashboardFromMatrix(payload);
         setApiStatus(true);
