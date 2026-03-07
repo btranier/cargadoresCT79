@@ -100,6 +100,7 @@ class QueryBody(BaseModel):
     only_active: bool = True
 
 @app.get("/api/readings/latest")
+@app.get("/readings/latest")
 def readings_latest(limit: int = 200):
     with SessionLocal() as db:
         rows = db.execute(
@@ -121,6 +122,7 @@ def readings_latest(limit: int = 200):
         return out
 
 @app.post("/api/readings/query")
+@app.post("/readings/query")
 def readings_query(body: QueryBody):
     start = datetime.fromisoformat(body.start.replace("Z","+00:00")).replace(tzinfo=None)
     end = datetime.fromisoformat(body.end.replace("Z","+00:00")).replace(tzinfo=None)
@@ -175,19 +177,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 def serve_index():
     return FileResponse(INDEX_FILE)
 
-@app.get("/{full_path:path}", response_class=HTMLResponse)
-def spa_fallback(full_path: str):
-    if full_path.startswith("api/") or full_path == "health":
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Not Found")
-    candidate = os.path.join(STATIC_DIR, full_path)
-    if os.path.isfile(candidate):
-        return FileResponse(candidate)
-    return FileResponse(INDEX_FILE)
-
 
 # --- Bootstrap config + ingest + admin endpoints (v7) ---
-BOOTSTRAP_CONFIG_FILE = os.environ.get("BOOTSTRAP_CONFIG_FILE", "/app/data/config_meters.csv")
+BOOTSTRAP_CONFIG_FILE = os.environ.get("BOOTSTRAP_CONFIG_FILE", "./data/active_mapping.csv")
 
 def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
     if not os.path.exists(path):
@@ -520,6 +512,7 @@ def admin_gateway_status():
         return out
 
 @app.get("/api/admin/log_files")
+@app.get("/admin/log_files")
 def admin_log_files():
     files = sorted(glob.glob("/app/logs/*.log"))
     if not files:
@@ -527,6 +520,7 @@ def admin_log_files():
     return [{"name": os.path.basename(p), "path": p} for p in files][-200:]
 
 @app.get("/api/admin/log_file")
+@app.get("/admin/log_file")
 def admin_log_file(name: str, tail: int = 400):
     safe = os.path.basename(name)
     path = os.path.join("/app/logs", safe)
@@ -562,9 +556,28 @@ async def admin_import_config(payload: dict, replace: int = 0):
     res = _bootstrap_config_from_flat_file(path, replace=bool(replace))
     return {"ok": True, "result": res, "file": path}
 
+@app.post("/api/admin/import_default_config")
+@app.post("/admin/import_default_config")
+async def admin_import_default_config(replace: int = 0):
+    candidates = [
+        BOOTSTRAP_CONFIG_FILE,
+        "./data/Active-Mapping.csv",
+        "./data/active_mapping.csv",
+        "/app/data/Active-Mapping.csv",
+        "/app/data/active_mapping.csv",
+        "/workspace/cargadoresCT79/data/Active-Mapping.csv",
+    ]
+    path = next((c for c in candidates if c and os.path.exists(c)), None)
+    if not path:
+        return {"ok": False, "error": "file_not_found", "candidates": candidates}
+    res = _bootstrap_config_from_flat_file(path, replace=bool(replace))
+    return {"ok": True, "result": res, "file": path}
+
+
 
 # --- Admin exec logs ---
 @app.get("/api/admin/exec_logs")
+@app.get("/admin/exec_logs")
 def admin_exec_logs(limit: int = 200):
     with engine.begin() as conn:
         rows = conn.execute(text(
@@ -591,3 +604,14 @@ def admin_exec_logs(limit: int = 200):
             "duplicate_count": r.get("duplicate_count"),
         })
     return out
+
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+def spa_fallback(full_path: str):
+    if full_path.startswith("api/") or full_path.startswith("admin/") or full_path.startswith("readings/") or full_path == "health":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not Found")
+    candidate = os.path.join(STATIC_DIR, full_path)
+    if os.path.isfile(candidate):
+        return FileResponse(candidate)
+    return FileResponse(INDEX_FILE)
