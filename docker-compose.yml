@@ -6,7 +6,7 @@ services:
       - PORT=10000
       - DATABASE_URL=sqlite:////app/data/saci.db
       - DISABLE_POLLER=1
-      - BOOTSTRAP_CONFIG_FILE=/app/data/config_meters.csv
+      - BOOTSTRAP_CONFIG_FILE=/app/data/active_mapping.csv
       - TZ=Europe/Madrid
     expose:
       - "10000"

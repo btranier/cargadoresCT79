@@ -87,6 +87,7 @@
     .col-5{grid-column: span 5;}
     .col-7{grid-column: span 7;}
     .col-9{grid-column: span 9;}
+    .col-12{grid-column: span 12;}
     @media (max-width: 980px){
       .grid-12{grid-template-columns: 1fr;}
       .col-3,.col-5,.col-7,.col-9{grid-column:auto;}
@@ -430,9 +431,6 @@
       </div>
     </div>
 
-  </div>
-
-  <!-- Modal: E
     <!-- READINGS -->
     <div id="view-readings" class="view" style="display:none;">
       <div class="grid grid-12">
@@ -472,7 +470,9 @@
       </div>
     </div>
 
-dit Meter (PATCH MeterEditable) -->
+  </div>
+
+  <!-- Modal: Edit Meter (PATCH MeterEditable) -->
   <div class="modal-backdrop" id="meter-modal-backdrop">
     <div class="modal">
       <div class="modal-h">
@@ -664,17 +664,13 @@ dit Meter (PATCH MeterEditable) -->
       selectedMeter = null;
       btnEditMeter.disabled = true;
 
-      if (!selectedGateway) {
-        metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">Select a gateway</td></tr>`;
-        return;
-      }
-      const gid = gatewayId(selectedGateway);
-      if (gid == null) {
-        metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">Gateway gid missing</td></tr>`;
-        return;
+      let endpoint = "/api/config/meters";
+      if (selectedGateway) {
+        const gid = gatewayId(selectedGateway);
+        if (gid != null) endpoint = `/api/config/gateways/${encodeURIComponent(gid)}/meters`;
       }
       try {
-        const data = await apiFetch(`/api/config/gateways/${encodeURIComponent(gid)}/meters`);
+        const data = await apiFetch(endpoint);
         meters = Array.isArray(data) ? data : (data?.meters || []);
         renderMeters();
         setApiStatus(true);
