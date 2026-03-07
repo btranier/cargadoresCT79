@@ -143,17 +143,26 @@ def readings_query(body: QueryBody):
             return ts.replace(minute=0, second=0, microsecond=0)
 
         series = {}
+        label_counts = {}
+        meter_labels = {}
         for r, slot, multiplier, is_active in rows:
             if body.only_active and is_active is not None and int(is_active) == 0:
                 continue
-            label = slot or f"G{r.gateway_id}-U{r.unit_id}"
-            prev = series.get(("__prev", label))
+            meter_key = (r.meter_id or 0, r.gateway_id, r.unit_id)
+            if meter_key not in meter_labels:
+                base_label = slot or f"G{r.gateway_id}-U{r.unit_id}"
+                seen = label_counts.get(base_label, 0)
+                label_counts[base_label] = seen + 1
+                meter_labels[meter_key] = base_label if seen == 0 else f"{base_label} ({seen+1})"
+            label = meter_labels[meter_key]
+
+            prev = series.get(("__prev", meter_key))
             if prev is not None and r.kwh_import is not None and r.kwh_import >= prev:
                 delta = r.kwh_import - prev
                 mul = 1.0 if multiplier is None else float(multiplier)
                 b = bucketize(r.ts_utc, body.granularity)
                 series[(b, label)] = series.get((b,label), 0.0) + (delta * mul)
-            series[("__prev", label)] = r.kwh_import
+            series[("__prev", meter_key)] = r.kwh_import
 
         buckets = sorted({b for (b,_) in series.keys() if not (isinstance(b, str) and b=="__prev")})
         slots = sorted({s for (b,s) in series.keys() if not (isinstance(b, str) and b=="__prev")})
@@ -514,10 +523,29 @@ def admin_gateway_status():
 @app.get("/api/admin/log_files")
 @app.get("/admin/log_files")
 def admin_log_files():
+    file_entries = []
     files = sorted(glob.glob("/app/logs/*.log"))
     if not files:
         files = sorted(glob.glob("./logs/*.log"))
-    return [{"name": os.path.basename(p), "path": p} for p in files][-200:]
+    for p in files:
+        file_entries.append({"name": os.path.basename(p), "path": p, "source": "file"})
+
+    # Also expose run logs stored in DB (for environments where log files are not persisted)
+    with engine.begin() as conn:
+        db_rows = conn.execute(text(
+            "SELECT log_file, run_start_utc FROM exec_logs "
+            "WHERE log_file IS NOT NULL AND TRIM(log_file) <> '' "
+            "ORDER BY run_start_utc DESC LIMIT 400"
+        )).mappings().all()
+    seen = {entry["name"] for entry in file_entries}
+    for row in db_rows:
+        base = os.path.basename(row.get("log_file") or "")
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        file_entries.append({"name": base, "path": row.get("log_file"), "source": "db"})
+
+    return file_entries[-200:]
 
 @app.get("/api/admin/log_file")
 @app.get("/admin/log_file")
@@ -526,11 +554,25 @@ def admin_log_file(name: str, tail: int = 400):
     path = os.path.join("/app/logs", safe)
     if not os.path.exists(path):
         path = os.path.join("./logs", safe)
-    if not os.path.exists(path):
-        return {"ok": False, "error": "not_found"}
-    with open(path, "r", encoding="utf-8", errors="ignore") as f:
-        lines = f.readlines()
-    return {"ok": True, "name": safe, "lines": lines[-int(tail):]}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+        return {"ok": True, "name": safe, "lines": lines[-int(tail):], "source": "file"}
+
+    # Fallback to DB-stored execution log text by matching basename(log_file)
+    with engine.begin() as conn:
+        row = conn.execute(text(
+            "SELECT run_start_utc, log_text FROM exec_logs "
+            "WHERE log_file IS NOT NULL AND TRIM(log_file) <> '' "
+            "AND (log_file = :safe OR log_file LIKE :suffix) "
+            "ORDER BY run_start_utc DESC LIMIT 1"
+        ), {"safe": safe, "suffix": f"%/{safe}"}).mappings().first()
+    if row and (row.get("log_text") is not None):
+        text_content = row.get("log_text") or ""
+        lines = text_content.splitlines(keepends=True)
+        return {"ok": True, "name": safe, "lines": lines[-int(tail):], "source": "db"}
+
+    return {"ok": False, "error": "not_found"}
 
 @app.get("/api/admin/config_summary")
 def admin_config_summary():
