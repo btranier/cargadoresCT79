@@ -6,3 +6,9 @@ seed:
 
 poll-once:
 	PYTHONPATH=. python -m backend.poller
+
+deploy:
+	./deploy.sh $${REF:-main}
+
+stop-all-containers:
+	docker stop $$(docker ps -q) || true
