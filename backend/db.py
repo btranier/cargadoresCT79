@@ -40,6 +40,9 @@ class Meter(Base):
     phase = Column(String, nullable=True)
     status = Column(String, nullable=True, default="Activo")
     multiplier = Column(Float, nullable=True, default=1.0)
+    owner_name = Column(String, nullable=True)
+    parking_slot = Column(String, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
 
 class Reading(Base):
     __tablename__ = "readings"
