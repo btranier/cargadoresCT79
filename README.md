@@ -69,3 +69,29 @@ gateway_host,gateway_port,unit_id,slot_code,description,phase,status,multiplier,
 - Si **no** pones `device_uid`, debes completar `gateway_host`, `gateway_port` y `unit_id`.
 - Si pones `device_uid`, puede faltar gateway/unit inicialmente y luego completarse.
 - Guarda el CSV en UTF-8 con cabecera.
+
+## Importar lecturas CSV (desde Raspberry por línea de comandos)
+
+Ejecuta directamente:
+
+```bash
+cd /ruta/a/cargadoresCT79
+./import_readings.sh readings_20260201.csv
+```
+
+Este flujo:
+- crea/reutiliza gateways detectados en lecturas + mapping,
+- precarga **32 medidores por gateway** (unit_id 1..32),
+- aplica el mapping activo desde `data/active_mapping.csv`.
+
+Opcionalmente, para otro destino de DB o mapping:
+
+```bash
+DB_PATH=./data/saci.db MAPPING_CSV=./data/active_mapping.csv ./import_readings.sh readings_20260201.csv
+```
+
+También disponible como `make`:
+
+```bash
+make import-readings CSV=readings_20260201.csv
+```
