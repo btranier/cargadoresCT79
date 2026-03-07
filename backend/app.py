@@ -6,11 +6,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from datetime import datetime
-from sqlalchemy import select, and_, text
+from sqlalchemy import select, and_, or_, text
 from typing import Optional
 import os, json
 
-from .db import SessionLocal, init_db, Gateway, Meter, Reading
+from .db import SessionLocal, init_db, engine, Gateway, Meter, Reading
 
 STATIC_DIR = "frontend"
 INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
@@ -69,6 +69,13 @@ def edit_meter(mid: int, m: MeterEditable):
         row = db.get(Meter, mid)
         if not row: raise HTTPException(404, "Medidor no encontrado")
         data = m.dict(exclude_unset=True)
+
+        slot_code = data.get("slot_code")
+        if slot_code:
+            dup = db.execute(select(Meter.id).where(Meter.slot_code == slot_code, Meter.id != mid)).first()
+            if dup:
+                raise HTTPException(409, "slot_code ya está asignado a otro medidor")
+
         for k in ("slot_code","description","phase","status","multiplier"):
             if k in data: setattr(row, k, data[k])
         db.commit(); db.refresh(row)
@@ -108,7 +115,7 @@ def readings_query(body: QueryBody):
         rows = db.execute(
             select(Reading, Meter.slot_code)
             .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
-            .where(and_(Reading.ts_utc >= start, Reading.ts_utc <= end))
+            .where(and_(Reading.ts_utc >= start, Reading.ts_utc <= end, or_(Meter.status == None, Meter.status == "Activo")))
             .order_by(Reading.gateway_id, Reading.unit_id, Reading.ts_utc)
         ).all()
 
@@ -274,6 +281,10 @@ def _get_or_create_gateway(db, host: str, port: int):
     db.add(gw); db.commit(); db.refresh(gw)
     return gw
 
+def _get_meter_id(db, gateway_id: int, unit_id: int):
+    m = db.query(Meter).filter(Meter.gateway_id==gateway_id, Meter.unit_id==unit_id).first()
+    return m.id if m else None
+
 def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, unit_id: int | None = None):
     device_uid = (device_uid or "").strip()
     if not device_uid:
@@ -425,7 +436,7 @@ async def ingest_bulk_day(payload: dict):
                     """), {
                         "ts_utc": ts.replace("Z","").replace("T"," ").replace("+00:00",""),
                         "gateway_id": gw_row.id,
-                        "unit_id": unit_i,
+                        "unit_id": int(unit),
                         "meter_id": meter_id,
                         "volt_v": r.get("volt_v"),
                         "current_a": r.get("current_a"),
