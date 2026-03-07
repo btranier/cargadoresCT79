@@ -266,7 +266,10 @@
         <div class="card col-5">
           <div class="card-h">
             <div class="card-title">Gateways (read-only)</div>
-            <button class="btn" id="btn-refresh-gateways">Refresh</button>
+            <div class="row">
+              <button class="btn" id="btn-import-default-config">Load Active-Mapping.csv</button>
+              <button class="btn" id="btn-refresh-gateways">Refresh</button>
+            </div>
           </div>
           <div class="card-b">
             <div id="config-error" class="err" style="display:none;"></div>
@@ -547,6 +550,15 @@
       return data;
     }
 
+    async function apiFetchAny(paths, opts = {}) {
+      let lastErr = null;
+      for (const p of paths) {
+        try { return await apiFetch(p, opts); }
+        catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error("Request failed");
+    }
+
     function showError(id, msg) {
       const el = document.getElementById(id);
       el.style.display = msg ? "block" : "none";
@@ -591,10 +603,12 @@
     const metersBody = document.getElementById("meters-body");
     const selectedGatewayLabel = document.getElementById("selected-gateway-label");
     const btnRefreshGateways = document.getElementById("btn-refresh-gateways");
+    const btnImportDefaultConfig = document.getElementById("btn-import-default-config");
     const btnRefreshMeters = document.getElementById("btn-refresh-meters");
     const btnEditMeter = document.getElementById("btn-edit-meter");
 
     btnRefreshGateways.addEventListener("click", () => loadGateways());
+    btnImportDefaultConfig.addEventListener("click", () => importDefaultConfig());
     btnRefreshMeters.addEventListener("click", () => loadMeters());
     btnEditMeter.addEventListener("click", () => {
       if (!selectedMeter) return;
@@ -625,6 +639,27 @@
       } catch (e) {
         showError("config-error", e.message || String(e));
         setApiStatus(false);
+      }
+    }
+
+    async function importDefaultConfig() {
+      showError("config-error", "");
+      btnImportDefaultConfig.disabled = true;
+      const prev = btnImportDefaultConfig.textContent;
+      btnImportDefaultConfig.textContent = "Loading...";
+      try {
+        const data = await apiFetchAny([
+          "/api/admin/import_default_config?replace=1",
+          "/admin/import_default_config?replace=1"
+        ], { method: "POST", body: JSON.stringify({}) });
+        const loaded = data?.result?.loaded ?? 0;
+        showError("config-error", `Imported mapping: ${loaded} meter rows (${data?.file || "file"})`);
+        await loadGateways();
+      } catch (e) {
+        showError("config-error", `Import failed: ${e.message || String(e)}`);
+      } finally {
+        btnImportDefaultConfig.disabled = false;
+        btnImportDefaultConfig.textContent = prev;
       }
     }
 
@@ -816,9 +851,10 @@
 
     async function loadExecLogs() {
       try {
-        const rows = await apiFetch("/api/admin/exec_logs?limit=25");
+        const rows = await apiFetchAny(["/api/admin/exec_logs?limit=25", "/admin/exec_logs?limit=25"]);
         renderExecLogs(rows || []);
-      } catch (_) {
+      } catch (e) {
+        showError("logs-error", e.message || String(e));
         execLogsBody.innerHTML = `<tr><td colspan="4" style="color:var(--muted);">No execution logs</td></tr>`;
       }
     }
@@ -840,7 +876,7 @@
     async function loadLogFiles() {
       showError("logs-error", "");
       try {
-        const data = await apiFetch("/api/admin/log_files");
+        const data = await apiFetchAny(["/api/admin/log_files", "/admin/log_files"]);
         logFiles = Array.isArray(data) ? data : (data?.files || []);
         renderLogFiles();
         setApiStatus(true);
@@ -856,8 +892,10 @@
         logFilesList.innerHTML = `<div style="padding:10px; color:var(--muted);">No files</div>`;
         return;
       }
-      logFiles.forEach(f => {
+      let firstName = "";
+      logFiles.forEach((f, idx) => {
         const name = (typeof f === "string") ? f : f.name;
+        if (!firstName && name) firstName = name;
         const btn = document.createElement("button");
         btn.className = "btn";
         btn.style.width = "100%";
@@ -883,6 +921,13 @@
 
         logFilesList.appendChild(btn);
       });
+
+      if (!selectedLogFile && firstName) {
+        selectedLogFile = firstName;
+        btnReloadLog.disabled = false;
+        renderLogFiles();
+        loadLog(firstName);
+      }
     }
 
     async function loadLog(name) {
@@ -891,7 +936,7 @@
       logOutput.textContent = "Loading...";
       try {
         const tail = tailsByPeriod[logsPeriod.value] ?? 400; // swagger default tail=400
-        const data = await apiFetch(`/api/admin/log_file?name=${encodeURIComponent(name)}&tail=${encodeURIComponent(tail)}`);
+        const data = await apiFetchAny([`/api/admin/log_file?name=${encodeURIComponent(name)}&tail=${encodeURIComponent(tail)}`, `/admin/log_file?name=${encodeURIComponent(name)}&tail=${encodeURIComponent(tail)}`]);
         // swagger says JSON response; support both {text} and raw string
         rawLogText = (typeof data === "string") ? data : (data?.text || data?.content || (Array.isArray(data?.lines) ? data.lines.join("") : JSON.stringify(data, null, 2)));
         renderLogText();
@@ -934,7 +979,7 @@
       showError("readings-error", "");
       readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">Loading...</td></tr>`;
       try {
-        const rows = await apiFetch("/api/readings/latest?limit=500");
+        const rows = await apiFetchAny(["/api/readings/latest?limit=500", "/readings/latest?limit=500"]);
         renderReadings(rows || []);
         setApiStatus(true);
       } catch (e) {
@@ -1145,7 +1190,7 @@
       totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>`;
       try {
         const range = periodToRange(dashPeriod.value);
-        const payload = await apiFetch("/api/readings/query", {
+        const payload = await apiFetchAny(["/api/readings/query", "/readings/query"], {
           method: "POST",
           body: JSON.stringify({ start: range.start, end: range.end, granularity: "15min", only_active: true })
         });

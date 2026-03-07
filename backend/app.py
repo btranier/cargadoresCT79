@@ -100,6 +100,7 @@ class QueryBody(BaseModel):
     only_active: bool = True
 
 @app.get("/api/readings/latest")
+@app.get("/readings/latest")
 def readings_latest(limit: int = 200):
     with SessionLocal() as db:
         rows = db.execute(
@@ -554,6 +555,24 @@ async def admin_import_config(payload: dict, replace: int = 0):
         return {"ok": False, "error": "missing csv_text"}
     res = _bootstrap_config_from_flat_file(path, replace=bool(replace))
     return {"ok": True, "result": res, "file": path}
+
+@app.post("/api/admin/import_default_config")
+@app.post("/admin/import_default_config")
+async def admin_import_default_config(replace: int = 0):
+    candidates = [
+        BOOTSTRAP_CONFIG_FILE,
+        "./data/Active-Mapping.csv",
+        "./data/active_mapping.csv",
+        "/app/data/Active-Mapping.csv",
+        "/app/data/active_mapping.csv",
+        "/workspace/cargadoresCT79/data/Active-Mapping.csv",
+    ]
+    path = next((c for c in candidates if c and os.path.exists(c)), None)
+    if not path:
+        return {"ok": False, "error": "file_not_found", "candidates": candidates}
+    res = _bootstrap_config_from_flat_file(path, replace=bool(replace))
+    return {"ok": True, "result": res, "file": path}
+
 
 
 # --- Admin exec logs ---
