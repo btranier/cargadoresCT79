@@ -388,6 +388,7 @@
                 <option value="week">Week</option>
                 <option value="month">Calendar month</option>
               </select>
+              <select id="dash-month" title="Select month" style="display:none; min-width:180px;"></select>
               <button class="btn" id="btn-refresh-dashboard">Refresh</button>
             </div>
           </div>
@@ -963,13 +964,58 @@
     let dashChart = null;
 
     const dashPeriod = document.getElementById("dash-period");
+    const dashMonth = document.getElementById("dash-month");
     const btnRefreshDashboard = document.getElementById("btn-refresh-dashboard");
     const totalsBody = document.getElementById("totals-body");
     const dashGwCount = document.getElementById("dash-gw-count");
     const dashMeterCount = document.getElementById("dash-meter-count");
 
-    dashPeriod.addEventListener("change", () => refreshDashboard());
+    dashPeriod.addEventListener("change", () => {
+      updateDashMonthVisibility();
+      refreshDashboard();
+    });
+    dashMonth.addEventListener("change", () => refreshDashboard());
     btnRefreshDashboard.addEventListener("click", () => refreshDashboard());
+
+    function monthIso(year, monthIndex) {
+      return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    }
+
+    function monthLabel(year, monthIndex) {
+      return new Date(year, monthIndex, 1).toLocaleDateString(undefined, {
+        month: "long",
+        year: "numeric"
+      });
+    }
+
+    function initDashMonthOptions() {
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const options = [];
+
+      for (let i = 0; i <= 12; i++) {
+        const d = new Date(currentMonthStart);
+        d.setMonth(currentMonthStart.getMonth() - i);
+        options.push({
+          value: monthIso(d.getFullYear(), d.getMonth()),
+          label: monthLabel(d.getFullYear(), d.getMonth())
+        });
+      }
+
+      dashMonth.innerHTML = "";
+      options.forEach(({ value, label }) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        dashMonth.appendChild(opt);
+      });
+
+      if (options.length) dashMonth.value = options[0].value;
+    }
+
+    function updateDashMonthVisibility() {
+      dashMonth.style.display = (dashPeriod.value === "month") ? "inline-flex" : "none";
+    }
 
     // -------------------- Readings (Latest 500) --------------------
     const readingsBody = document.getElementById("readings-body");
@@ -1036,6 +1082,13 @@
         start.setDate(end.getDate() - 6);
         start.setHours(0, 0, 0, 0);
       } else {
+        const monthValue = dashMonth.value;
+        if (monthValue) {
+          const [y, m] = monthValue.split("-").map(Number);
+          const monthStart = new Date(y, m - 1, 1);
+          const nextMonthStart = new Date(y, m, 1);
+          return { start: monthStart.toISOString(), end: nextMonthStart.toISOString() };
+        }
         start.setDate(1);
         start.setHours(0, 0, 0, 0);
       }
@@ -1293,6 +1346,8 @@ function renderTotals(totals) {
 
     // -------------------- Boot --------------------
     (async function boot(){
+      initDashMonthOptions();
+      updateDashMonthVisibility();
       try { await apiFetch("/health"); setApiStatus(true); }
       catch (_) { setApiStatus(false); }
       await loadGateways();
