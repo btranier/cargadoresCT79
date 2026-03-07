@@ -187,7 +187,7 @@ def spa_fallback(full_path: str):
 
 
 # --- Bootstrap config + ingest + admin endpoints (v7) ---
-BOOTSTRAP_CONFIG_FILE = os.environ.get("BOOTSTRAP_CONFIG_FILE", "/app/data/config_meters.csv")
+BOOTSTRAP_CONFIG_FILE = os.environ.get("BOOTSTRAP_CONFIG_FILE", "./data/active_mapping.csv")
 
 def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
     if not os.path.exists(path):
