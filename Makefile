@@ -12,3 +12,6 @@ deploy:
 
 stop-all-containers:
 	docker stop $$(docker ps -q) || true
+
+import-readings:
+	./import_readings.sh $${CSV:-readings_20260201.csv}
