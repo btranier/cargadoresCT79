@@ -44,6 +44,9 @@ class MeterEditable(BaseModel):
     phase: Optional[str] = None
     status: Optional[str] = None
     multiplier: Optional[float] = None
+    owner_name: Optional[str] = None
+    parking_slot: Optional[str] = None
+    is_active: Optional[bool] = None
 
 @app.get("/api/config/gateways")
 def list_gateways():
@@ -59,7 +62,21 @@ def list_meters_by_gateway(gid: int):
         rows = db.execute(select(Meter).where(Meter.gateway_id==gid).order_by(Meter.unit_id)).scalars().all()
         return [
             {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"slot_code":m.slot_code,
-             "description":m.description,"phase":m.phase,"status":m.status,"multiplier":m.multiplier}
+             "description":m.description,"phase":m.phase,"status":m.status,"multiplier":m.multiplier,
+             "owner_name":m.owner_name,"parking_slot":m.parking_slot,"is_active":bool(m.is_active)}
+            for m in rows
+        ]
+
+
+
+@app.get("/api/config/meters")
+def list_all_meters():
+    with SessionLocal() as db:
+        rows = db.execute(select(Meter).order_by(Meter.id)).scalars().all()
+        return [
+            {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"slot_code":m.slot_code,
+             "description":m.description,"phase":m.phase,"status":m.status,"multiplier":m.multiplier,
+             "owner_name":m.owner_name,"parking_slot":m.parking_slot,"is_active":bool(m.is_active)}
             for m in rows
         ]
 
@@ -69,38 +86,35 @@ def edit_meter(mid: int, m: MeterEditable):
         row = db.get(Meter, mid)
         if not row: raise HTTPException(404, "Medidor no encontrado")
         data = m.dict(exclude_unset=True)
-
-        slot_code = data.get("slot_code")
-        if slot_code:
-            dup = db.execute(select(Meter.id).where(Meter.slot_code == slot_code, Meter.id != mid)).first()
-            if dup:
-                raise HTTPException(409, "slot_code ya está asignado a otro medidor")
-
-        for k in ("slot_code","description","phase","status","multiplier"):
+        for k in ("slot_code","description","phase","status","multiplier","owner_name","parking_slot"):
             if k in data: setattr(row, k, data[k])
+        if "is_active" in data:
+            row.is_active = 1 if data["is_active"] else 0
         db.commit(); db.refresh(row)
         return {"ok": True}
 
 class QueryBody(BaseModel):
     start: str
     end: str
-    granularity: str = "hour"
+    granularity: str = "15min"
+    only_active: bool = True
 
 @app.get("/api/readings/latest")
 def readings_latest(limit: int = 200):
     with SessionLocal() as db:
         rows = db.execute(
-            select(Reading, Meter.slot_code, Reading.gateway_id, Reading.unit_id)
+            select(Reading, Meter.slot_code, Meter.owner_name, Meter.parking_slot, Meter.is_active, Reading.gateway_id, Reading.unit_id)
             .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
             .order_by(Reading.ts_utc.desc())
             .limit(limit)
         ).all()
         out=[]
-        for r, slot, gwid, unitid in rows:
+        for r, slot, owner_name, parking_slot, is_active, gwid, unitid in rows:
             out.append({
                 "ts_utc": r.ts_utc.isoformat() if r.ts_utc else None,
                 "gateway_id": gwid, "unit_id": unitid, "meter_id": r.meter_id,
                 "slot_code": slot,
+                "owner_name": owner_name, "parking_slot": parking_slot, "is_active": bool(is_active) if is_active is not None else None,
                 "volt_v": r.volt_v, "current_a": r.current_a, "power_kw": r.power_kw,
                 "freq_hz": r.freq_hz, "pf": r.pf, "kwh_import": r.kwh_import
             })
@@ -113,7 +127,7 @@ def readings_query(body: QueryBody):
 
     with SessionLocal() as db:
         rows = db.execute(
-            select(Reading, Meter.slot_code)
+            select(Reading, Meter.slot_code, Meter.multiplier, Meter.is_active)
             .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
             .where(and_(Reading.ts_utc >= start, Reading.ts_utc <= end, or_(Meter.status == None, Meter.status == "Activo")))
             .order_by(Reading.gateway_id, Reading.unit_id, Reading.ts_utc)
@@ -122,16 +136,21 @@ def readings_query(body: QueryBody):
         def bucketize(ts, gran):
             if gran == "day":
                 return ts.replace(hour=0, minute=0, second=0, microsecond=0)
+            if gran == "15min":
+                return ts.replace(minute=(ts.minute // 15) * 15, second=0, microsecond=0)
             return ts.replace(minute=0, second=0, microsecond=0)
 
         series = {}
-        for r, slot in rows:
+        for r, slot, multiplier, is_active in rows:
+            if body.only_active and is_active is not None and int(is_active) == 0:
+                continue
             label = slot or f"G{r.gateway_id}-U{r.unit_id}"
             prev = series.get(("__prev", label))
             if prev is not None and r.kwh_import is not None and r.kwh_import >= prev:
                 delta = r.kwh_import - prev
+                mul = 1.0 if multiplier is None else float(multiplier)
                 b = bucketize(r.ts_utc, body.granularity)
-                series[(b, label)] = series.get((b,label), 0.0) + delta
+                series[(b, label)] = series.get((b,label), 0.0) + (delta * mul)
             series[("__prev", label)] = r.kwh_import
 
         buckets = sorted({b for (b,_) in series.keys() if not (isinstance(b, str) and b=="__prev")})
@@ -221,6 +240,9 @@ def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
                         phase=(row.get("phase") or "").strip() or None,
                         status=(row.get("status") or "").strip() or "Activo",
                         multiplier=float((row.get("multiplier") or "1").strip() or 1),
+                        owner_name=(row.get("owner_name") or "").strip() or None,
+                        parking_slot=(row.get("parking_slot") or "").strip() or None,
+                        is_active=0 if (str(row.get("is_active") or "1").strip().lower() in ("0","false","no","inactive")) else 1,
                     )
                     db.add(m)
                     loaded += 1
@@ -238,6 +260,12 @@ def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
                         m.gateway_id = gw.id
                     if unit_id > 0:
                         m.unit_id = unit_id
+                    if row.get("owner_name"):
+                        m.owner_name = (row.get("owner_name") or "").strip() or None
+                    if row.get("parking_slot"):
+                        m.parking_slot = (row.get("parking_slot") or "").strip() or None
+                    if row.get("is_active"):
+                        m.is_active = 0 if (str(row.get("is_active") or "").strip().lower() in ("0","false","no","inactive")) else 1
                     db.add(m)
 
         db.commit()
@@ -257,6 +285,14 @@ def _ensure_ingest_tables():
         if "error" not in cols:
             conn.execute(text("ALTER TABLE readings ADD COLUMN error TEXT"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_readings_ts_gw_unit ON readings(ts_utc, gateway_id, unit_id)"))
+        meter_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(meters)")).fetchall()]
+        if "owner_name" not in meter_cols:
+            conn.execute(text("ALTER TABLE meters ADD COLUMN owner_name TEXT"))
+        if "parking_slot" not in meter_cols:
+            conn.execute(text("ALTER TABLE meters ADD COLUMN parking_slot TEXT"))
+        if "is_active" not in meter_cols:
+            conn.execute(text("ALTER TABLE meters ADD COLUMN is_active INTEGER DEFAULT 1"))
+
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS exec_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -284,6 +320,7 @@ def _get_or_create_gateway(db, host: str, port: int):
 def _get_meter_id(db, gateway_id: int, unit_id: int):
     m = db.query(Meter).filter(Meter.gateway_id==gateway_id, Meter.unit_id==unit_id).first()
     return m.id if m else None
+
 
 def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, unit_id: int | None = None):
     device_uid = (device_uid or "").strip()
@@ -485,12 +522,16 @@ def admin_gateway_status():
 @app.get("/api/admin/log_files")
 def admin_log_files():
     files = sorted(glob.glob("/app/logs/*.log"))
+    if not files:
+        files = sorted(glob.glob("./logs/*.log"))
     return [{"name": os.path.basename(p), "path": p} for p in files][-200:]
 
 @app.get("/api/admin/log_file")
 def admin_log_file(name: str, tail: int = 400):
     safe = os.path.basename(name)
     path = os.path.join("/app/logs", safe)
+    if not os.path.exists(path):
+        path = os.path.join("./logs", safe)
     if not os.path.exists(path):
         return {"ok": False, "error": "not_found"}
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
