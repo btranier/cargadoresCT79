@@ -1,0 +1,541 @@
+import csv
+import glob
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel
+from datetime import datetime
+from sqlalchemy import select, and_, text
+from typing import Optional
+import os, json
+
+from .db import SessionLocal, init_db, Gateway, Meter, Reading
+
+STATIC_DIR = "frontend"
+INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
+
+app = FastAPI(title="SACI PI Stack v1.4.2")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"]
+)
+
+@app.on_event("startup")
+def startup():
+    init_db()
+    _ensure_ingest_tables()
+
+@app.get("/health")
+def health():
+    state = {"last_poll_utc": None, "inserted": None}
+    try:
+        with open("./data/poller_state.json","r",encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception:
+        pass
+    return {"ok": True, "time": datetime.utcnow().isoformat(), "poller": state}
+
+class MeterEditable(BaseModel):
+    slot_code: Optional[str] = None
+    description: Optional[str] = None
+    phase: Optional[str] = None
+    status: Optional[str] = None
+    multiplier: Optional[float] = None
+
+@app.get("/api/config/gateways")
+def list_gateways():
+    with SessionLocal() as db:
+        return [
+            {"id":g.id,"label":g.label,"host":g.host,"port":g.port}
+            for g in db.execute(select(Gateway)).scalars().all()
+        ]
+
+@app.get("/api/config/gateways/{gid}/meters")
+def list_meters_by_gateway(gid: int):
+    with SessionLocal() as db:
+        rows = db.execute(select(Meter).where(Meter.gateway_id==gid).order_by(Meter.unit_id)).scalars().all()
+        return [
+            {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"slot_code":m.slot_code,
+             "description":m.description,"phase":m.phase,"status":m.status,"multiplier":m.multiplier}
+            for m in rows
+        ]
+
+@app.patch("/api/config/meters/{mid}")
+def edit_meter(mid: int, m: MeterEditable):
+    with SessionLocal() as db:
+        row = db.get(Meter, mid)
+        if not row: raise HTTPException(404, "Medidor no encontrado")
+        data = m.dict(exclude_unset=True)
+        for k in ("slot_code","description","phase","status","multiplier"):
+            if k in data: setattr(row, k, data[k])
+        db.commit(); db.refresh(row)
+        return {"ok": True}
+
+class QueryBody(BaseModel):
+    start: str
+    end: str
+    granularity: str = "hour"
+
+@app.get("/api/readings/latest")
+def readings_latest(limit: int = 200):
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Reading, Meter.slot_code, Reading.gateway_id, Reading.unit_id)
+            .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
+            .order_by(Reading.ts_utc.desc())
+            .limit(limit)
+        ).all()
+        out=[]
+        for r, slot, gwid, unitid in rows:
+            out.append({
+                "ts_utc": r.ts_utc.isoformat() if r.ts_utc else None,
+                "gateway_id": gwid, "unit_id": unitid, "meter_id": r.meter_id,
+                "slot_code": slot,
+                "volt_v": r.volt_v, "current_a": r.current_a, "power_kw": r.power_kw,
+                "freq_hz": r.freq_hz, "pf": r.pf, "kwh_import": r.kwh_import
+            })
+        return out
+
+@app.post("/api/readings/query")
+def readings_query(body: QueryBody):
+    start = datetime.fromisoformat(body.start.replace("Z","+00:00")).replace(tzinfo=None)
+    end = datetime.fromisoformat(body.end.replace("Z","+00:00")).replace(tzinfo=None)
+
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(Reading, Meter.slot_code)
+            .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
+            .where(and_(Reading.ts_utc >= start, Reading.ts_utc <= end))
+            .order_by(Reading.gateway_id, Reading.unit_id, Reading.ts_utc)
+        ).all()
+
+        def bucketize(ts, gran):
+            if gran == "day":
+                return ts.replace(hour=0, minute=0, second=0, microsecond=0)
+            return ts.replace(minute=0, second=0, microsecond=0)
+
+        series = {}
+        for r, slot in rows:
+            label = slot or f"G{r.gateway_id}-U{r.unit_id}"
+            prev = series.get(("__prev", label))
+            if prev is not None and r.kwh_import is not None and r.kwh_import >= prev:
+                delta = r.kwh_import - prev
+                b = bucketize(r.ts_utc, body.granularity)
+                series[(b, label)] = series.get((b,label), 0.0) + delta
+            series[("__prev", label)] = r.kwh_import
+
+        buckets = sorted({b for (b,_) in series.keys() if not (isinstance(b, str) and b=="__prev")})
+        slots = sorted({s for (b,s) in series.keys() if not (isinstance(b, str) and b=="__prev")})
+        out = {"buckets":[b.isoformat() for b in buckets], "slots": slots, "matrix":[]}
+        for b in buckets:
+            out["matrix"].append([ round(series.get((b,s),0.0),3) for s in slots ])
+        return out
+
+@app.get("/api/admin/poller_state")
+def poller_state():
+    path = "./data/poller_state.json"
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            import json; return json.load(f)
+    except Exception:
+        return {"last_poll_utc": None, "inserted": None}
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+def serve_index():
+    return FileResponse(INDEX_FILE)
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+def spa_fallback(full_path: str):
+    if full_path.startswith("api/") or full_path == "health":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not Found")
+    candidate = os.path.join(STATIC_DIR, full_path)
+    if os.path.isfile(candidate):
+        return FileResponse(candidate)
+    return FileResponse(INDEX_FILE)
+
+
+# --- Bootstrap config + ingest + admin endpoints (v7) ---
+BOOTSTRAP_CONFIG_FILE = os.environ.get("BOOTSTRAP_CONFIG_FILE", "/app/data/config_meters.csv")
+
+def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
+    if not os.path.exists(path):
+        return {"loaded": 0, "reason": "file_not_found"}
+    with SessionLocal() as db:
+        existing = db.query(Meter).count()
+        if existing and existing > 0 and not replace:
+            return {"loaded": 0, "reason": "already_configured", "meters": existing}
+        if replace:
+            # wipe config tables (readings preserved)
+            db.query(Meter).delete()
+            db.query(Gateway).delete()
+            db.commit()
+
+        loaded = 0
+        with open(path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                host = (row.get("gateway_host") or "").strip()
+                port = int((row.get("gateway_port") or "0").strip() or 0)
+                unit_id = int((row.get("unit_id") or "0").strip() or 0)
+                device_uid = (row.get("device_uid") or row.get("meter_uid") or "").strip() or None
+
+                # Allow config-by-UID even if gateway not known yet
+                if not device_uid and (not host or port <= 0 or unit_id <= 0):
+                    continue
+
+                gw = None
+                if host and port > 0:
+                    gw = db.query(Gateway).filter(Gateway.host==host, Gateway.port==port).first()
+                    if not gw:
+                        gw = Gateway(label=f"{host}:{port}", host=host, port=port)
+                        db.add(gw)
+                        db.commit()
+                        db.refresh(gw)
+
+                m = None
+                if device_uid:
+                    m = db.query(Meter).filter(Meter.device_uid==device_uid).first()
+                if not m and gw and unit_id > 0:
+                    m = db.query(Meter).filter(Meter.gateway_id==gw.id, Meter.unit_id==unit_id).first()
+
+                if not m:
+                    m = Meter(
+                        device_uid=device_uid,
+                        gateway_id=(gw.id if gw else None),
+                        unit_id=(unit_id if unit_id > 0 else None),
+                        slot_code=(row.get("slot_code") or "").strip() or None,
+                        description=(row.get("description") or "").strip() or None,
+                        phase=(row.get("phase") or "").strip() or None,
+                        status=(row.get("status") or "").strip() or "Activo",
+                        multiplier=float((row.get("multiplier") or "1").strip() or 1),
+                    )
+                    db.add(m)
+                    loaded += 1
+                else:
+                    # update mapping fields if provided
+                    if row.get("slot_code"):
+                        m.slot_code = (row.get("slot_code") or "").strip() or None
+                    if row.get("description"):
+                        m.description = (row.get("description") or "").strip() or None
+                    if row.get("phase"):
+                        m.phase = (row.get("phase") or "").strip() or None
+                    if row.get("status"):
+                        m.status = (row.get("status") or "").strip() or m.status
+                    if gw:
+                        m.gateway_id = gw.id
+                    if unit_id > 0:
+                        m.unit_id = unit_id
+                    db.add(m)
+
+        db.commit()
+        return {"loaded": loaded, "reason": "ok"}
+@app.on_event("startup")
+def _startup_bootstrap_config():
+    try:
+        _bootstrap_config_from_flat_file(BOOTSTRAP_CONFIG_FILE)
+    except Exception:
+        pass
+
+def _ensure_ingest_tables():
+    with engine.begin() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(readings)")).fetchall()]
+        if "ok" not in cols:
+            conn.execute(text("ALTER TABLE readings ADD COLUMN ok INTEGER DEFAULT 1"))
+        if "error" not in cols:
+            conn.execute(text("ALTER TABLE readings ADD COLUMN error TEXT"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_readings_ts_gw_unit ON readings(ts_utc, gateway_id, unit_id)"))
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS exec_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_start_utc TEXT UNIQUE,
+            run_end_utc TEXT,
+            exit_code INTEGER,
+            source TEXT,
+            csv_file TEXT,
+            log_file TEXT,
+            gateway_failures_json TEXT,
+            readings_count INTEGER,
+            inserted_count INTEGER,
+            duplicate_count INTEGER,
+            log_text TEXT
+        )
+        """))
+
+def _get_or_create_gateway(db, host: str, port: int):
+    gw = db.query(Gateway).filter(Gateway.host==host, Gateway.port==port).first()
+    if gw: return gw
+    gw = Gateway(label=f"{host}:{port}", host=host, port=port)
+    db.add(gw); db.commit(); db.refresh(gw)
+    return gw
+
+def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, unit_id: int | None = None):
+    device_uid = (device_uid or "").strip()
+    if not device_uid:
+        return None
+    m = db.query(Meter).filter(Meter.device_uid==device_uid).first()
+    if not m:
+        m = Meter(device_uid=device_uid, gateway_id=gw_id, unit_id=unit_id, status="Activo", multiplier=1.0)
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+    else:
+        # Keep last-seen location (optional)
+        changed = False
+        if gw_id is not None and m.gateway_id != gw_id:
+            m.gateway_id = gw_id
+            changed = True
+        if unit_id is not None and m.unit_id != unit_id:
+            m.unit_id = unit_id
+            changed = True
+        if changed:
+            db.add(m)
+            db.commit()
+    return m
+
+
+@app.post("/api/ingest/run")
+async def ingest_run(payload: dict):
+    readings = payload.get("readings") or []
+    gw_failures = payload.get("gateway_failures") or []
+    run_start = payload.get("run_start_utc")
+    run_end = payload.get("run_end_utc")
+    exit_code = payload.get("exit_code")
+    source = payload.get("source")
+    csv_file = payload.get("csv_file")
+    log_file = payload.get("log_file")
+    log_text = payload.get("log_text") or ""
+
+    inserted = 0
+    duplicates = 0
+
+    with SessionLocal() as db:
+        with engine.begin() as conn:
+            for r in readings:
+                try:
+                    ts = r.get("timestamp_utc")
+                    gw = r.get("gateway")
+                    unit = r.get("unit")
+                    device_uid = r.get("device_uid") or r.get("meter_uid") or r.get("uid")
+
+                    # Must have timestamp + gateway. device_uid preferred, unit optional unless device_uid missing.
+                    if not ts or not gw:
+                        continue
+                    host, port = gw.split(":")
+                    gw_row = _get_or_create_gateway(db, host, int(port))
+
+                    unit_i = None
+                    try:
+                        unit_i = int(unit) if unit is not None else None
+                    except Exception:
+                        unit_i = None
+
+                    meter_id = None
+                    if device_uid:
+                        m = _get_or_create_meter_by_uid(db, str(device_uid), gw_row.id, unit_i)
+                        meter_id = m.id if m else None
+                    else:
+                        # legacy fallback
+                        if unit_i is None or unit_i <= 0:
+                            continue
+                        m = db.query(Meter).filter(Meter.gateway_id==gw_row.id, Meter.unit_id==unit_i).first()
+                        meter_id = m.id if m else None
+
+                    res = conn.execute(text("""
+                        INSERT OR IGNORE INTO readings
+                        (ts_utc, gateway_id, unit_id, meter_id, volt_v, current_a, power_kw, freq_hz, pf, kwh_import, ok, error)
+                        VALUES
+                        (:ts_utc, :gateway_id, :unit_id, :meter_id, :volt_v, :current_a, :power_kw, :freq_hz, :pf, :kwh_import, :ok, :error)
+                    """), {
+                        "ts_utc": ts.replace("Z","").replace("T"," ").replace("+00:00",""),
+                        "gateway_id": gw_row.id,
+                        "unit_id": unit_i,
+                        "meter_id": meter_id,
+                        "volt_v": r.get("volt_v"),
+                        "current_a": r.get("current_a"),
+                        "power_kw": r.get("power_kw") or r.get("pow_kw"),
+                        "freq_hz": r.get("freq_hz"),
+                        "pf": r.get("pf"),
+                        "kwh_import": r.get("kwh_import"),
+                        "ok": 1 if (str(r.get("ok")).lower() in ("1","true","yes","ok")) else 0,
+                        "error": r.get("error"),
+                    })
+                    if res.rowcount == 1:
+                        inserted += 1
+                    else:
+                        duplicates += 1
+                except Exception:
+                    # never break the run for a single bad row
+                    continue
+
+            # exec_logs insert (always)
+            try:
+                conn.execute(text("""
+                    INSERT OR IGNORE INTO exec_logs
+                    (run_start_utc, run_end_utc, exit_code, source, csv_file, log_file, gateway_failures_json,
+                     readings_count, inserted_count, duplicate_count, log_text)
+                    VALUES
+                    (:run_start_utc, :run_end_utc, :exit_code, :source, :csv_file, :log_file, :gateway_failures_json,
+                     :readings_count, :inserted_count, :duplicate_count, :log_text)
+                """), {
+                    "run_start_utc": run_start,
+                    "run_end_utc": run_end,
+                    "exit_code": exit_code,
+                    "source": source,
+                    "csv_file": csv_file,
+                    "log_file": log_file,
+                    "gateway_failures_json": json.dumps(gw_failures),
+                    "readings_count": len(readings),
+                    "inserted_count": inserted,
+                    "duplicate_count": duplicates,
+                    "log_text": log_text,
+                })
+            except Exception:
+                pass
+
+    return {"ok": True, "inserted": inserted, "duplicates": duplicates}
+@app.post("/api/ingest/bulk_day")
+async def ingest_bulk_day(payload: dict):
+    _ensure_ingest_tables()
+    rows = payload.get("rows") or []
+    inserted = 0
+    duplicates = 0
+    with SessionLocal() as db:
+        with engine.begin() as conn:
+            for r in rows:
+                try:
+                    ts = r.get("timestamp_utc")
+                    gw = r.get("gateway")
+                    unit = r.get("unit") or r.get("unit_id")
+                    if not ts or not gw or not unit or int(unit) <= 0:
+                        continue
+                    host, port = gw.split(":")
+                    gw_row = _get_or_create_gateway(db, host, int(port))
+                    meter_id = _get_meter_id(db, gw_row.id, int(unit))
+                    conn.execute(text("""
+                        INSERT OR IGNORE INTO readings
+                        (ts_utc, gateway_id, unit_id, meter_id, volt_v, current_a, power_kw, freq_hz, pf, kwh_import, ok, error)
+                        VALUES
+                        (:ts_utc, :gateway_id, :unit_id, :meter_id, :volt_v, :current_a, :power_kw, :freq_hz, :pf, :kwh_import, :ok, :error)
+                    """), {
+                        "ts_utc": ts.replace("Z","").replace("T"," ").replace("+00:00",""),
+                        "gateway_id": gw_row.id,
+                        "unit_id": unit_i,
+                        "meter_id": meter_id,
+                        "volt_v": r.get("volt_v"),
+                        "current_a": r.get("current_a"),
+                        "power_kw": r.get("power_kw"),
+                        "freq_hz": r.get("freq_hz"),
+                        "pf": r.get("pf"),
+                        "kwh_import": r.get("kwh_import"),
+                        "ok": 0 if (str(r.get("ok","")).lower() in ("false","0","no")) else 1,
+                        "error": r.get("error"),
+                    })
+                    ch = conn.execute(text("SELECT changes()")).scalar() or 0
+                    if ch == 1: inserted += 1
+                    else: duplicates += 1
+                except Exception:
+                    continue
+    return {"inserted": inserted, "ignored_duplicates": duplicates, "rows_seen": len(rows)}
+
+@app.get("/api/admin/gateway_status")
+def admin_gateway_status():
+    with engine.begin() as conn:
+        last = conn.execute(text(
+            "SELECT run_start_utc, exit_code, gateway_failures_json FROM exec_logs "
+            "ORDER BY run_start_utc DESC LIMIT 1"
+        )).mappings().first()
+    failures = []
+    exit_code = 0
+    run_start = None
+    if last:
+        run_start = last.get("run_start_utc")
+        exit_code = last.get("exit_code") or 0
+        try: failures = json.loads(last.get("gateway_failures_json") or "[]")
+        except: failures = []
+    failed_set = set()
+    for f in failures or []:
+        g = f.get("gateway")
+        if g: failed_set.add(g)
+    with SessionLocal() as db:
+        gws = db.query(Gateway).order_by(Gateway.id).all()
+        out=[]
+        for g in gws:
+            key=f"{g.host}:{g.port}"
+            ok = (exit_code == 0) and (key not in failed_set)
+            out.append({"gateway_id": g.id, "label": g.label, "host": g.host, "port": g.port, "gateway": key, "ok": bool(ok), "last_run_start_utc": run_start})
+        return out
+
+@app.get("/api/admin/log_files")
+def admin_log_files():
+    files = sorted(glob.glob("/app/logs/*.log"))
+    return [{"name": os.path.basename(p), "path": p} for p in files][-200:]
+
+@app.get("/api/admin/log_file")
+def admin_log_file(name: str, tail: int = 400):
+    safe = os.path.basename(name)
+    path = os.path.join("/app/logs", safe)
+    if not os.path.exists(path):
+        return {"ok": False, "error": "not_found"}
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+    return {"ok": True, "name": safe, "lines": lines[-int(tail):]}
+
+@app.get("/api/admin/config_summary")
+def admin_config_summary():
+    with SessionLocal() as db:
+        gw_count = db.query(Gateway).count()
+        meter_count = db.query(Meter).count()
+        per_gw = db.execute(select(Gateway.id, Gateway.label, Gateway.host, Gateway.port)).all()
+        per=[]
+        for gid,label,host,port in per_gw:
+            c = db.query(Meter).filter(Meter.gateway_id==gid).count()
+            per.append({"gateway_id": gid, "label": label, "host": host, "port": port, "meters": c})
+        return {"gateways": gw_count, "meters": meter_count, "per_gateway": per}
+
+@app.post("/api/admin/import_config")
+async def admin_import_config(payload: dict, replace: int = 0):
+    path = BOOTSTRAP_CONFIG_FILE
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if "csv_text" in payload and payload["csv_text"]:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(payload["csv_text"])
+    else:
+        return {"ok": False, "error": "missing csv_text"}
+    res = _bootstrap_config_from_flat_file(path, replace=bool(replace))
+    return {"ok": True, "result": res, "file": path}
+
+
+# --- Admin exec logs ---
+@app.get("/api/admin/exec_logs")
+def admin_exec_logs(limit: int = 200):
+    with engine.begin() as conn:
+        rows = conn.execute(text(
+            "SELECT run_start_utc, run_end_utc, exit_code, source, csv_file, log_file, "
+            "gateway_failures_json, readings_count, inserted_count, duplicate_count "
+            "FROM exec_logs ORDER BY run_start_utc DESC LIMIT :limit"
+        ), {"limit": int(limit)}).mappings().all()
+    out = []
+    for r in rows:
+        try:
+            gf = json.loads(r.get("gateway_failures_json") or "[]")
+        except Exception:
+            gf = []
+        out.append({
+            "run_start_utc": r.get("run_start_utc"),
+            "run_end_utc": r.get("run_end_utc"),
+            "exit_code": r.get("exit_code"),
+            "source": r.get("source"),
+            "csv_file": r.get("csv_file"),
+            "log_file": r.get("log_file"),
+            "gateway_failures": gf,
+            "readings_count": r.get("readings_count"),
+            "inserted_count": r.get("inserted_count"),
+            "duplicate_count": r.get("duplicate_count"),
+        })
+    return out

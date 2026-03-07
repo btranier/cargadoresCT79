@@ -1,0 +1,10 @@
+gateway_host,gateway_port,unit_id,slot_code,description,phase,status
+192.168.1.101,502,1,P246,Nacho,,Activo
+192.168.1.101,502,2,P154,Oscar,,Activo
+192.168.1.101,502,3,P133,Asterio,,Activo
+192.168.1.101,502,4,P205,José,,Activo
+192.168.1.101,502,5,P131,José María,,Activo
+192.168.1.101,502,6,P131,Valle,,Activo
+192.168.1.102,502,24,P318,Arancha,,Activo
+192.168.1.102,502,25,P361,Ben,,Activo
+192.168.1.103,502,2,P302,Carlos,,Activo

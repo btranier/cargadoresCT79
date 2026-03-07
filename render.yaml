@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: saci-pi-stack
+    env: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: false
+    healthCheckPath: /health
+    envVars:
+      - key: GATEWAYS
+        value: 192.168.1.100:502,192.168.1.101:502,192.168.1.102:502,192.168.1.103:502
+      - key: UNITS
+        value: 1-32
+      - key: DISABLE_POLLER
+        value: "0"
+      - key: POLL_INTERVAL_SEC
+        value: "900"
+      - key: SEED_ON_BOOT
+        value: "1"
+      - key: RESEED_FULL
+        value: "1"
+      - key: IMPORT_READINGS_ON_START
+        value: "0"
+      # SACI register map (zero-based)
+      - key: REG_VOLT_ADDR
+        value: "256"
+      - key: REG_VOLT_COUNT
+        value: "2"
+      - key: REG_VOLT_TYPE
+        value: "uint32_be_scale_0p001"
+      - key: REG_CURR_ADDR
+        value: "258"
+      - key: REG_CURR_COUNT
+        value: "2"
+      - key: REG_CURR_TYPE
+        value: "int32_be_scale_0p001"
+      - key: REG_PWR_ADDR
+        value: "260"
+      - key: REG_PWR_COUNT
+        value: "2"
+      - key: REG_PWR_TYPE
+        value: "int32_be_scale_0p001"
+      - key: REG_FREQ_ADDR
+        value: "266"
+      - key: REG_FREQ_COUNT
+        value: "1"
+      - key: REG_FREQ_TYPE
+        value: "u16_scale_0p1"
+      - key: REG_PF_ADDR
+        value: "267"
+      - key: REG_PF_COUNT
+        value: "1"
+      - key: REG_PF_TYPE
+        value: "u16_scale_0p001"
+      - key: REG_KWH_ADDR
+        value: "270"
+      - key: REG_KWH_COUNT
+        value: "2"
+      - key: REG_KWH_TYPE
+        value: "uint32_be_scale_0p01"

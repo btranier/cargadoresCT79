@@ -1,0 +1,61 @@
+services:
+  backend:
+    build: .
+    container_name: saci-pi-backend
+    environment:
+      - PORT=10000
+      - DATABASE_URL=sqlite:////app/data/saci.db
+      - DISABLE_POLLER=1
+      - BOOTSTRAP_CONFIG_FILE=/app/data/config_meters.csv
+      - TZ=Europe/Madrid
+    expose:
+      - "10000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  collector:
+    build: .
+    container_name: saci-pi-collector
+    command: ["python", "-m", "jobs.collector_service"]
+    environment:
+      - ROOT_DIR=/app
+      - PROBE_OUTDIR=/app/logs
+      - PROBE_SCRIPT=/app/Cargadores.py
+      - PROBE_INTERVAL_SEC=900
+      - INGEST_URL=http://backend:10000/api/ingest/run
+      - SOURCE_ID=pi5
+      - TZ=Europe/Madrid
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on: [backend]
+
+  daily-finalizer:
+    build: .
+    container_name: saci-pi-finalizer
+    command: ["python", "-m", "jobs.daily_finalizer"]
+    environment:
+      - PROBE_OUTDIR=/app/logs
+      - INGEST_BULK_URL=http://backend:10000/api/ingest/bulk_day
+      - SOURCE_ID=pi5
+      - FINALIZE_HOUR=23
+      - FINALIZE_MIN=50
+      - TZ=Europe/Madrid
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on: [backend]
+
+  ui:
+    image: nginx:alpine
+    container_name: saci-pi
+    depends_on: [backend]
+    ports: ["80:80"]
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped

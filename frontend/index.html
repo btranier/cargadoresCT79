@@ -1,0 +1,1197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SACI PI Stack • SFDC Dark</title>
+
+  <!-- Chart.js (stacked bar) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#0B1220;
+      --panel:#0F172A;
+      --panel2:#111B2E;
+      --panel3:#13223F;
+      --border:#1F2A44;
+      --muted:#93A4BD;
+      --text:#E7EEF9;
+      --dangerBg:#3B0A0A;
+      --dangerBorder:#6B1D1D;
+      --accent1:#00D0FF;
+      --accent2:#7C4DFF;
+
+      --radius:14px;
+      --shadow: 0 8px 30px rgba(0,0,0,.35);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    html,body{height:100%;}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background: radial-gradient(700px 500px at 20% -10%, rgba(0,208,255,.18), transparent 60%),
+                  radial-gradient(800px 550px at 80% 15%, rgba(124,77,255,.16), transparent 60%),
+                  var(--bg);
+    }
+
+    .topbar{
+      position:sticky; top:0; z-index:30;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.75);
+      border-bottom:1px solid var(--border);
+    }
+    .topbar-inner{
+      max-width:1200px; margin:0 auto;
+      padding:12px 16px;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .brand{display:flex; align-items:center; gap:12px;}
+    .logo{
+      width:36px; height:36px; border-radius:12px;
+      background: linear-gradient(135deg,var(--accent1),var(--accent2));
+      box-shadow: var(--shadow);
+    }
+    .brand-title{font-weight:700; font-size:14px; letter-spacing:.2px;}
+    .brand-sub{font-size:12px; color:var(--muted); margin-top:2px;}
+    .pill{
+      font-size:12px; color:var(--text);
+      padding:6px 10px; border-radius:999px;
+      background:rgba(17,27,46,.9);
+      border:1px solid var(--border);
+    }
+
+    .container{max-width:1200px; margin:18px auto 40px; padding:0 16px;}
+    .tabs{
+      display:inline-flex; gap:6px;
+      padding:6px; border-radius:999px;
+      background: rgba(17,27,46,.8);
+      border:1px solid var(--border);
+    }
+    .tab{
+      border:0; cursor:pointer;
+      padding:10px 14px;
+      color:var(--text);
+      background:transparent;
+      border-radius:999px;
+      font-size:13px;
+    }
+    .tab.active{background: rgba(26,42,70,.9); border:1px solid rgba(31,42,68,.9);}
+
+    .grid{display:grid; gap:14px;}
+    .grid-12{grid-template-columns: repeat(12, minmax(0,1fr));}
+    .col-3{grid-column: span 3;}
+    .col-5{grid-column: span 5;}
+    .col-7{grid-column: span 7;}
+    .col-9{grid-column: span 9;}
+    @media (max-width: 980px){
+      .grid-12{grid-template-columns: 1fr;}
+      .col-3,.col-5,.col-7,.col-9{grid-column:auto;}
+    }
+
+    .card{
+      background: rgba(15,23,42,.88);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card-h{
+      padding:14px 14px 10px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px solid rgba(31,42,68,.5);
+    }
+    .card-title{font-size:14px; font-weight:700;}
+    .card-b{padding:14px;}
+
+    .btn{
+      border:1px solid var(--border);
+      background: rgba(17,27,46,.9);
+      color:var(--text);
+      border-radius: 12px;
+      padding:9px 12px;
+      font-size:13px;
+      cursor:pointer;
+      display:inline-flex; align-items:center; gap:8px;
+    }
+    .btn:hover{background: rgba(22,37,69,.95);}
+    .btn.primary{
+      background: rgba(26,42,70,.95);
+      border-color: rgba(55,72,110,.8);
+    }
+    .btn.primary:hover{background: rgba(34,54,90,.98);}
+    .btn.danger{
+      background: rgba(59,10,10,.9);
+      border-color: var(--dangerBorder);
+    }
+    .btn.danger:hover{background: rgba(74,12,12,.95);}
+    .btn:disabled{opacity:.55; cursor:not-allowed;}
+
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    .field{display:flex; flex-direction:column; gap:6px;}
+    .label{font-size:12px; color:var(--muted);}
+    input, select{
+      background: rgba(11,18,32,.95);
+      border:1px solid var(--border);
+      color:var(--text);
+      border-radius: 12px;
+      padding:10px 10px;
+      font-size:13px;
+      outline:none;
+      min-width: 160px;
+    }
+    input::placeholder{color: rgba(147,164,189,.7);}
+
+    .err{
+      border:1px solid var(--dangerBorder);
+      background: rgba(59,10,10,.85);
+      padding:10px 12px;
+      border-radius: 12px;
+      font-size:13px;
+      margin-bottom:12px;
+    }
+
+    table{width:100%; border-collapse:collapse;}
+    th,td{
+      border-bottom:1px solid rgba(31,42,68,.6);
+      padding:10px 10px;
+      text-align:left;
+      font-size:13px;
+      vertical-align:middle;
+    }
+    th{color: var(--muted); font-weight:600; font-size:12px;}
+    tr:hover td{background: rgba(11,18,32,.6);}
+    .mono{font-family: var(--mono); font-size:12.5px;}
+    .badge{
+      display:inline-block;
+      padding:4px 9px;
+      border-radius: 999px;
+      border:1px solid var(--border);
+      background: rgba(17,27,46,.95);
+      font-size:12px;
+      color: var(--text);
+    }
+    .clickable{cursor:pointer;}
+    .selected td{background: rgba(19,34,63,.8);}
+
+    .scroll{
+      max-height: 520px;
+      overflow:auto;
+      border-radius: 12px;
+      border:1px solid rgba(31,42,68,.7);
+      background: rgba(11,18,32,.7);
+    }
+    pre{
+      margin:0;
+      padding:12px;
+      font-size:12px;
+      line-height: 1.55;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .modal-backdrop{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      z-index:100;
+      padding: 16px;
+    }
+    .modal{
+      width:min(760px, 100%);
+      background: rgba(15,23,42,.98);
+      border:1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal-h{padding:14px; border-bottom:1px solid rgba(31,42,68,.6); display:flex; justify-content:space-between; align-items:center;}
+    .modal-t{font-weight:700; font-size:14px;}
+    .modal-b{padding:14px;}
+    .modal-f{padding:14px; border-top:1px solid rgba(31,42,68,.6); display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap;}
+    .muted{color: var(--muted); font-size:12px;}
+
+    .chart-wrap{
+      border:1px solid rgba(31,42,68,.7);
+      border-radius: 12px;
+      background: rgba(11,18,32,.7);
+      padding: 10px;
+      height: 520px;
+    }
+
+    .hint{
+      font-size:12px;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <div class="brand-title">SACI PI Stack v1.4.2</div>
+          <div class="brand-sub">SFDC Dark • Config • Logs • Dashboard</div>
+        </div>
+      </div>
+      <span class="pill">Same-origin API (/api/*)</span>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="row" style="justify-content:space-between; margin-bottom:14px;">
+      <div class="tabs" role="tablist" aria-label="Main tabs">
+        <button class="tab active" data-tab="config">Config</button>
+        <button class="tab" data-tab="logs">Logs</button>
+        <button class="tab" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="readings">Readings</button>
+      </div>
+      <div class="row">
+        <span class="badge" id="api-status">API: unknown</span>
+      </div>
+    </div>
+
+    <!-- CONFIG -->
+    <div id="view-config" class="view">
+      <div class="grid grid-12">
+        <div class="card col-5">
+          <div class="card-h">
+            <div class="card-title">Gateways (read-only)</div>
+            <button class="btn" id="btn-refresh-gateways">Refresh</button>
+          </div>
+          <div class="card-b">
+            <div id="config-error" class="err" style="display:none;"></div>
+            <div class="scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>gid</th>
+                    <th>gateway_host</th>
+                    <th>gateway_port</th>
+                  </tr>
+                </thead>
+                <tbody id="gateways-body"></tbody>
+              </table>
+            </div>
+            <div style="margin-top:10px;" class="muted">
+              Selected: <span class="mono" id="selected-gateway-label">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card col-7">
+          <div class="card-h">
+            <div class="card-title">Meters (edit only)</div>
+            <div class="row">
+              <button class="btn primary" id="btn-edit-meter" disabled>Edit selected meter</button>
+              <button class="btn" id="btn-refresh-meters" disabled>Refresh</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div class="scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>mid</th>
+                    <th>unit_id</th>
+                    <th>slot_code</th>
+                    <th>description</th>
+                    <th>phase</th>
+                    <th>status</th>
+                    <th>multiplier</th>
+                  </tr>
+                </thead>
+                <tbody id="meters-body"></tbody>
+              </table>
+            </div>
+            <div class="hint">
+              Swagger shows only <span class="mono">PATCH /api/config/meters/{mid}</span> (no create/delete), so the UI is “edit only”.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div id="view-logs" class="view" style="display:none;">
+      <div class="grid grid-12">
+        <div class="card col-3">
+          <div class="card-h">
+            <div class="card-title">Log files</div>
+            <button class="btn" id="btn-refresh-log-files">Refresh</button>
+          </div>
+          <div class="card-b">
+            <div id="logs-error" class="err" style="display:none;"></div>
+
+            <div class="field" style="margin-bottom:10px;">
+              <div class="label">Time period (tail lines)</div>
+              <select id="logs-period">
+                <option value="15m">Last 15 min</option>
+                <option value="1h" selected>Last 1 hour</option>
+                <option value="6h">Last 6 hours</option>
+                <option value="24h">Last 24 hours</option>
+              </select>
+            </div>
+
+            <div class="scroll" style="max-height: 440px;">
+              <div id="log-files-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card col-9">
+          <div class="card-h">
+            <div class="card-title">Logs viewer</div>
+            <div class="row">
+              <input id="logs-filter" placeholder="Filter lines (contains)" style="min-width:260px;" />
+              <button class="btn" id="btn-reload-log" disabled>Reload</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div class="scroll" style="max-height: 680px;">
+              <pre id="log-output">(select a file)</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="view-dashboard" class="view" style="display:none;">
+      <div class="grid grid-12">
+        <div class="card col-9">
+          <div class="card-h">
+            <div class="card-title">Energy by slot code (hourly stacked)</div>
+            <div class="row">
+              <select id="dash-period">
+                <option value="6h">Last 6 hours</option>
+                <option value="24h" selected>Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+              </select>
+              <button class="btn" id="btn-refresh-dashboard">Refresh</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div id="dash-error" class="err" style="display:none;"></div>
+            <div class="chart-wrap">
+              <canvas id="kwhChart"></canvas>
+              <div class="hint">
+                Uses <span class="mono">POST /api/readings/query</span> with body:
+                <span class="mono">{ start, end, granularity: \"hour\" }</span>
+                (per swagger).
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card col-3">
+          <div class="card-h">
+            <div class="card-title">Totals (period)</div>
+          </div>
+          <div class="card-b">
+            <div class="scroll" style="max-height: 520px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>slot_code</th>
+                    <th style="text-align:right;">kWh</th>
+                  </tr>
+                </thead>
+                <tbody id="totals-body"></tbody>
+              </table>
+            </div>
+
+            <div class="card" style="margin-top:12px; background: rgba(11,18,32,.7);">
+              <div class="card-b">
+                <div class="muted">Config join</div>
+                <div style="margin-top:6px;">Gateways: <span class="mono" id="dash-gw-count">0</span></div>
+                <div>Meters: <span class="mono" id="dash-meter-count">0</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal: E
+    <!-- READINGS -->
+    <div id="view-readings" class="view" style="display:none;">
+      <div class="grid grid-12">
+        <div class="card col-12">
+          <div class="card-h">
+            <div class="card-title">Latest readings (500)</div>
+            <div class="row">
+              <button class="btn" id="btn-refresh-readings">Refresh</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div id="readings-error" class="err" style="display:none;"></div>
+            <div class="scroll" style="max-height: 620px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ts_utc</th>
+                    <th>gateway_id</th>
+                    <th>unit_id</th>
+                    <th>slot_code</th>
+                    <th>kwh_import</th>
+                    <th>power_kw</th>
+                    <th>volt_v</th>
+                    <th>current_a</th>
+                    <th>freq_hz</th>
+                    <th>pf</th>
+                  </tr>
+                </thead>
+                <tbody id="readings-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+dit Meter (PATCH MeterEditable) -->
+  <div class="modal-backdrop" id="meter-modal-backdrop">
+    <div class="modal">
+      <div class="modal-h">
+        <div class="modal-t" id="meter-modal-title">Edit meter</div>
+        <button class="btn" id="btn-close-meter-modal">Close</button>
+      </div>
+      <div class="modal-b">
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap:10px;">
+          <div class="field">
+            <div class="label">slot_code</div>
+            <input id="meter-slot-code" placeholder="e.g. P246" />
+          </div>
+          <div class="field">
+            <div class="label">status</div>
+            <input id="meter-status" placeholder="Activo / Inactivo" />
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <div class="label">description</div>
+            <input id="meter-description" placeholder="e.g. Nacho" />
+          </div>
+          <div class="field">
+            <div class="label">phase</div>
+            <input id="meter-phase" placeholder="(optional)" />
+          </div>
+          <div class="field">
+            <div class="label">multiplier</div>
+            <input id="meter-multiplier" type="number" step="0.0001" placeholder="(optional)" />
+          </div>
+        </div>
+        <div class="hint">
+          This calls <span class="mono">PATCH /api/config/meters/{mid}</span> with <span class="mono">MeterEditable</span>.
+        </div>
+      </div>
+      <div class="modal-f">
+        <button class="btn primary" id="btn-meter-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // -------------------- API helper --------------------
+    async function apiFetch(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+        ...opts
+      });
+      const ct = (res.headers.get("content-type") || "");
+      const isJson = ct.includes("application/json");
+      const data = isJson ? await res.json().catch(() => null) : await res.text().catch(() => "");
+      if (!res.ok) {
+        const msg = (data && data.detail) ? JSON.stringify(data.detail) :
+                    (data && data.error) ? data.error :
+                    (typeof data === "string" ? data : "Request failed");
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function showError(id, msg) {
+      const el = document.getElementById(id);
+      el.style.display = msg ? "block" : "none";
+      el.textContent = msg || "";
+    }
+
+    function setApiStatus(ok) {
+      const el = document.getElementById("api-status");
+      el.textContent = ok ? "API: ok" : "API: error";
+      el.style.background = ok ? "rgba(17,27,46,.9)" : "rgba(59,10,10,.9)";
+      el.style.borderColor = ok ? "var(--border)" : "var(--dangerBorder)";
+    }
+
+    // -------------------- Tabs --------------------
+    const tabButtons = document.querySelectorAll(".tab");
+    const views = {
+      config: document.getElementById("view-config"),
+      logs: document.getElementById("view-logs"),
+      dashboard: document.getElementById("view-dashboard"),
+      readings: document.getElementById("view-readings"),
+    };
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        tabButtons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const key = btn.dataset.tab;
+        Object.entries(views).forEach(([k, v]) => v.style.display = (k === key ? "block" : "none"));
+        if (key === "logs") loadLogFiles();
+        if (key === "dashboard") refreshDashboard();
+        if (key === "readings") loadLatestReadings();
+      });
+    });
+
+    // -------------------- Config (Gateways + Meters) --------------------
+    let gateways = [];
+    let selectedGateway = null;
+    let meters = [];
+    let selectedMeter = null;
+
+    const gatewaysBody = document.getElementById("gateways-body");
+    const metersBody = document.getElementById("meters-body");
+    const selectedGatewayLabel = document.getElementById("selected-gateway-label");
+    const btnRefreshGateways = document.getElementById("btn-refresh-gateways");
+    const btnRefreshMeters = document.getElementById("btn-refresh-meters");
+    const btnEditMeter = document.getElementById("btn-edit-meter");
+
+    btnRefreshGateways.addEventListener("click", () => loadGateways());
+    btnRefreshMeters.addEventListener("click", () => loadMeters());
+    btnEditMeter.addEventListener("click", () => {
+      if (!selectedMeter) return;
+      openMeterModal(selectedMeter);
+    });
+
+    function gatewayId(g) { return g.gid ?? g.id ?? g.gateway_id; }
+    function gatewayHost(g) { return g.gateway_host ?? g.host ?? g.gateway_ip ?? g.ip; }
+    function gatewayPort(g) { return g.gateway_port ?? g.port; }
+
+    async function loadGateways() {
+      showError("config-error", "");
+      try {
+        const data = await apiFetch("/api/config/gateways");
+        gateways = Array.isArray(data) ? data : (data?.gateways || []);
+        renderGateways();
+
+        if (!selectedGateway && gateways.length) selectedGateway = gateways[0];
+        if (selectedGateway) {
+          const sel = gateways.find(x => gatewayId(x) === gatewayId(selectedGateway)) ||
+                      gateways.find(x => gatewayHost(x) === gatewayHost(selectedGateway));
+          if (sel) selectedGateway = sel;
+        }
+
+        renderGateways();
+        await loadMeters();
+        setApiStatus(true);
+      } catch (e) {
+        showError("config-error", e.message || String(e));
+        setApiStatus(false);
+      }
+    }
+
+    function renderGateways() {
+      gatewaysBody.innerHTML = "";
+      gateways.forEach(g => {
+        const tr = document.createElement("tr");
+        const active = selectedGateway && (gatewayId(g) === gatewayId(selectedGateway));
+        if (active) tr.classList.add("selected");
+        tr.classList.add("clickable");
+
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(String(gatewayId(g) ?? "-"))}</td>
+          <td class="mono">${escapeHtml(String(gatewayHost(g) ?? "-"))}</td>
+          <td class="mono">${escapeHtml(String(gatewayPort(g) ?? "-"))}</td>
+        `;
+
+        tr.addEventListener("click", async () => {
+          selectedGateway = g;
+          selectedMeter = null;
+          btnEditMeter.disabled = true;
+          renderGateways();
+          await loadMeters();
+        });
+
+        gatewaysBody.appendChild(tr);
+      });
+
+      selectedGatewayLabel.textContent = selectedGateway ? `${gatewayHost(selectedGateway) || "-"} (gid=${gatewayId(selectedGateway)})` : "-";
+      const enabled = !!selectedGateway;
+      btnRefreshMeters.disabled = !enabled;
+    }
+
+    async function loadMeters() {
+      showError("config-error", "");
+      metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">Loading...</td></tr>`;
+      selectedMeter = null;
+      btnEditMeter.disabled = true;
+
+      if (!selectedGateway) {
+        metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">Select a gateway</td></tr>`;
+        return;
+      }
+      const gid = gatewayId(selectedGateway);
+      if (gid == null) {
+        metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">Gateway gid missing</td></tr>`;
+        return;
+      }
+      try {
+        const data = await apiFetch(`/api/config/gateways/${encodeURIComponent(gid)}/meters`);
+        meters = Array.isArray(data) ? data : (data?.meters || []);
+        renderMeters();
+        setApiStatus(true);
+      } catch (e) {
+        showError("config-error", e.message || String(e));
+        meters = [];
+        renderMeters();
+        setApiStatus(false);
+      }
+    }
+
+    function meterId(m){ return m.mid ?? m.id; }
+
+    function renderMeters() {
+      metersBody.innerHTML = "";
+      if (!meters.length) {
+        metersBody.innerHTML = `<tr><td colspan="7" style="color:var(--muted);">${selectedGateway ? "No meters" : "Select a gateway"}</td></tr>`;
+        return;
+      }
+
+      meters.forEach(m => {
+        const mid = meterId(m);
+        const tr = document.createElement("tr");
+        const active = selectedMeter && (meterId(selectedMeter) === mid);
+        if (active) tr.classList.add("selected");
+        tr.classList.add("clickable");
+
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(String(mid ?? "-"))}</td>
+          <td class="mono">${escapeHtml(String(m.unit_id ?? "-"))}</td>
+          <td class="mono">${escapeHtml(String(m.slot_code ?? "-"))}</td>
+          <td title="${escapeAttr(m.description ?? "")}" style="max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${escapeHtml(String(m.description ?? "-"))}
+          </td>
+          <td>${escapeHtml(String(m.phase ?? ""))}</td>
+          <td>${escapeHtml(String(m.status ?? ""))}</td>
+          <td class="mono">${escapeHtml(String(m.multiplier ?? ""))}</td>
+        `;
+
+        tr.addEventListener("click", () => {
+          selectedMeter = m;
+          btnEditMeter.disabled = !meterId(m);
+          renderMeters();
+        });
+
+        metersBody.appendChild(tr);
+      });
+    }
+
+    async function patchMeter(mid, patch) {
+      showError("config-error", "");
+      // MeterEditable supports: slot_code, description, phase, status, multiplier (nullable)
+      await apiFetch(`/api/config/meters/${encodeURIComponent(mid)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      await loadMeters();
+    }
+
+    // -------------------- Meter modal (Edit only) --------------------
+    const meterBackdrop = document.getElementById("meter-modal-backdrop");
+    const slotCodeEl = document.getElementById("meter-slot-code");
+    const descEl = document.getElementById("meter-description");
+    const phaseEl = document.getElementById("meter-phase");
+    const statusEl = document.getElementById("meter-status");
+    const multEl = document.getElementById("meter-multiplier");
+    const btnCloseMeterModal = document.getElementById("btn-close-meter-modal");
+    const btnMeterSave = document.getElementById("btn-meter-save");
+
+    let modalMeter = null;
+
+    btnCloseMeterModal.addEventListener("click", () => closeMeterModal());
+    meterBackdrop.addEventListener("click", (e) => { if (e.target === meterBackdrop) closeMeterModal(); });
+
+    function openMeterModal(m) {
+      modalMeter = m;
+      slotCodeEl.value = m.slot_code ?? "";
+      descEl.value = m.description ?? "";
+      phaseEl.value = m.phase ?? "";
+      statusEl.value = m.status ?? "";
+      multEl.value = (m.multiplier ?? "") === null ? "" : String(m.multiplier ?? "");
+      meterBackdrop.style.display = "flex";
+    }
+    function closeMeterModal(){ meterBackdrop.style.display = "none"; modalMeter = null; }
+
+    btnMeterSave.addEventListener("click", async () => {
+      if (!modalMeter) return;
+      const mid = meterId(modalMeter);
+      if (mid == null) { showError("config-error", "Missing meter mid"); return; }
+
+      // nullable fields per MeterEditable
+      const multRaw = multEl.value.trim();
+      const multiplier = multRaw === "" ? null : Number(multRaw);
+
+      const patch = {
+        slot_code: emptyToNull(slotCodeEl.value),
+        description: emptyToNull(descEl.value),
+        phase: emptyToNull(phaseEl.value),
+        status: emptyToNull(statusEl.value),
+        multiplier: (multRaw === "" ? null : (Number.isFinite(multiplier) ? multiplier : null))
+      };
+
+      try {
+        await patchMeter(mid, patch);
+        closeMeterModal();
+      } catch (e) {
+        showError("config-error", e.message || String(e));
+      }
+    });
+
+    function emptyToNull(v){
+      const s = (v ?? "").toString().trim();
+      return s === "" ? null : s;
+    }
+
+    // -------------------- Logs --------------------
+    let logFiles = [];
+    let selectedLogFile = "";
+    let rawLogText = "";
+
+    const logFilesList = document.getElementById("log-files-list");
+    const logOutput = document.getElementById("log-output");
+    const logsPeriod = document.getElementById("logs-period");
+    const logsFilter = document.getElementById("logs-filter");
+    const btnRefreshLogFiles = document.getElementById("btn-refresh-log-files");
+    const btnReloadLog = document.getElementById("btn-reload-log");
+
+    btnRefreshLogFiles.addEventListener("click", () => loadLogFiles());
+    btnReloadLog.addEventListener("click", () => loadLog(selectedLogFile));
+    logsPeriod.addEventListener("change", () => { if (selectedLogFile) loadLog(selectedLogFile); });
+    logsFilter.addEventListener("input", () => renderLogText());
+
+    const tailsByPeriod = { "15m": 600, "1h": 1500, "6h": 6000, "24h": 24000 };
+
+    async function loadLogFiles() {
+      showError("logs-error", "");
+      try {
+        const data = await apiFetch("/api/admin/log_files");
+        logFiles = Array.isArray(data) ? data : (data?.files || []);
+        renderLogFiles();
+        setApiStatus(true);
+      } catch (e) {
+        showError("logs-error", e.message || String(e));
+        setApiStatus(false);
+      }
+    }
+
+    function renderLogFiles() {
+      logFilesList.innerHTML = "";
+      if (!logFiles.length) {
+        logFilesList.innerHTML = `<div style="padding:10px; color:var(--muted);">No files</div>`;
+        return;
+      }
+      logFiles.forEach(f => {
+        const name = (typeof f === "string") ? f : f.name;
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.style.width = "100%";
+        btn.style.justifyContent = "space-between";
+        btn.style.borderRadius = "0";
+        btn.style.borderLeft = "0";
+        btn.style.borderRight = "0";
+        btn.style.borderTop = "0";
+        btn.style.borderBottom = "1px solid rgba(31,42,68,.6)";
+        btn.style.background = (selectedLogFile === name) ? "rgba(19,34,63,.8)" : "rgba(11,18,32,.0)";
+
+        btn.innerHTML = `
+          <span class="mono" style="text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(name)}</span>
+          <span class="muted"></span>
+        `;
+
+        btn.addEventListener("click", async () => {
+          selectedLogFile = name;
+          btnReloadLog.disabled = false;
+          renderLogFiles();
+          await loadLog(name);
+        });
+
+        logFilesList.appendChild(btn);
+      });
+    }
+
+    async function loadLog(name) {
+      if (!name) return;
+      showError("logs-error", "");
+      logOutput.textContent = "Loading...";
+      try {
+        const tail = tailsByPeriod[logsPeriod.value] ?? 400; // swagger default tail=400
+        const data = await apiFetch(`/api/admin/log_file?name=${encodeURIComponent(name)}&tail=${encodeURIComponent(tail)}`);
+        // swagger says JSON response; support both {text} and raw string
+        rawLogText = (typeof data === "string") ? data : (data?.text || data?.content || (Array.isArray(data?.lines) ? data.lines.join("") : JSON.stringify(data, null, 2)));
+        renderLogText();
+        setApiStatus(true);
+      } catch (e) {
+        rawLogText = "";
+        logOutput.textContent = "(empty)";
+        showError("logs-error", e.message || String(e));
+        setApiStatus(false);
+      }
+    }
+
+    function renderLogText() {
+      const term = (logsFilter.value || "").trim().toLowerCase();
+      if (!term) { logOutput.textContent = rawLogText || "(empty)"; return; }
+      const filtered = (rawLogText || "")
+        .split("\n")
+        .filter(line => line.toLowerCase().includes(term))
+        .join("\n");
+      logOutput.textContent = filtered || "(no matches)";
+    }
+
+    // -------------------- Dashboard --------------------
+    let dashChart = null;
+
+    const dashPeriod = document.getElementById("dash-period");
+    const btnRefreshDashboard = document.getElementById("btn-refresh-dashboard");
+    const totalsBody = document.getElementById("totals-body");
+    const dashGwCount = document.getElementById("dash-gw-count");
+    const dashMeterCount = document.getElementById("dash-meter-count");
+
+    dashPeriod.addEventListener("change", () => refreshDashboard());
+    btnRefreshDashboard.addEventListener("click", () => refreshDashboard());
+
+    // -------------------- Readings (Latest 500) --------------------
+    const readingsBody = document.getElementById("readings-body");
+    const btnRefreshReadings = document.getElementById("btn-refresh-readings");
+
+    async function loadLatestReadings() {
+      showError("readings-error", "");
+      readingsBody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);">Loading...</td></tr>`;
+      try {
+        const rows = await apiFetch("/api/readings/latest?limit=500");
+        renderReadings(rows || []);
+        setApiStatus(true);
+      } catch (e) {
+        showError("readings-error", e.message || String(e));
+        readingsBody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);">No data</td></tr>`;
+        setApiStatus(false);
+      }
+    }
+
+    function renderReadings(rows) {
+      readingsBody.innerHTML = "";
+      if (!rows.length) {
+        readingsBody.innerHTML = `<tr><td colspan="10" style="color:var(--muted);">No rows</td></tr>`;
+        return;
+      }
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(r.ts_utc || "")}</td>
+          <td class="mono">${escapeHtml(String(r.gateway_id ?? ""))}</td>
+          <td class="mono">${escapeHtml(String(r.unit_id ?? ""))}</td>
+          <td class="mono">${escapeHtml(r.slot_code || "")}</td>
+          <td class="mono">${fmtNum(r.kwh_import)}</td>
+          <td class="mono">${fmtNum(r.power_kw)}</td>
+          <td class="mono">${fmtNum(r.volt_v)}</td>
+          <td class="mono">${fmtNum(r.current_a)}</td>
+          <td class="mono">${fmtNum(r.freq_hz)}</td>
+          <td class="mono">${fmtNum(r.pf)}</td>
+        `;
+        readingsBody.appendChild(tr);
+      }
+    }
+
+    function fmtNum(v) {
+      if (v === null || v === undefined || v === "") return "";
+      const n = Number(v);
+      if (Number.isNaN(n)) return String(v);
+      return (Math.round(n * 1000) / 1000).toString();
+    }
+
+    if (btnRefreshReadings) btnRefreshReadings.addEventListener("click", () => loadLatestReadings());
+
+
+
+    function periodToRange(period) {
+      const end = new Date();
+      const ms =
+        period === "6h" ? 6 * 3600e3 :
+        period === "24h" ? 24 * 3600e3 :
+        period === "7d" ? 7 * 24 * 3600e3 :
+        24 * 3600e3;
+      const start = new Date(end.getTime() - ms);
+      // swagger QueryBody expects strings; send ISO
+      return { start: start.toISOString(), end: end.toISOString() };
+    }
+
+    function hourBucket(isoOrMs) {
+      const d = new Date(isoOrMs);
+      d.setMinutes(0,0,0);
+      return d.toISOString();
+    }
+
+    function formatHourLabel(iso) {
+      const d = new Date(iso);
+      const hh = String(d.getHours()).padStart(2,"0");
+      const dd = String(d.getDate()).padStart(2,"0");
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      return `${hh}:00 ${dd}/${mm}`;
+    }
+
+    async function loadConfigJoin() {
+      const gw = await apiFetch("/api/config/gateways");
+      const gws = Array.isArray(gw) ? gw : (gw?.gateways || []);
+      const map = new Map();
+
+      for (const g of gws) {
+        const gid = gatewayId(g);
+        if (gid == null) continue;
+        const m = await apiFetch(`/api/config/gateways/${encodeURIComponent(gid)}/meters`);
+        const meters = Array.isArray(m) ? m : (m?.meters || []);
+
+        for (const meter of meters) {
+          const host = gatewayHost(g); // join key uses gateway_host per your requirement
+          const unit = meter.unit_id != null ? String(meter.unit_id) : "";
+          if (!host || !unit) continue;
+          const key = `${host}::${unit}`;
+          map.set(key, { slot_code: meter.slot_code ?? "?", multiplier: meter.multiplier ?? null });
+        }
+      }
+
+      dashGwCount.textContent = String(gws.length);
+      dashMeterCount.textContent = String(map.size);
+      return { gws, metersMap: map };
+    }
+
+    async function loadReadings(range) {
+      // Swagger QueryBody: { start: string, end: string, granularity: string (default hour) }
+      const body = { start: range.start, end: range.end, granularity: "hour" };
+      const data = await apiFetch("/api/readings/query", { method: "POST", body: JSON.stringify(body) });
+      // Unknown schema; accept common containers
+      return Array.isArray(data) ? data : (data?.readings || data?.rows || data?.data || []);
+    }
+
+    function parseReadingRow(r) {
+      // Join requirement: meters+readings by gateway ip address (gateway_host) and unit_id
+      const host = r.gateway_host ?? r.gateway_ip ?? r.host ?? r.ip;
+      const unit = (r.unit_id != null) ? String(r.unit_id) : null;
+
+      // Timestamp field (unknown); attempt common keys
+      const ts = r.ts ?? r.timestamp ?? r.time ?? r.created_at ?? r.at;
+
+      // Reading value (unknown); attempt common keys
+      const val = r.value ?? r.reading ?? r.reading_value ?? r.energy ?? r.kwh;
+
+      if (!host || unit == null || ts == null || val == null) return null;
+
+      const t = (typeof ts === "number") ? ts : new Date(ts).getTime();
+      const v = Number(val);
+      if (!Number.isFinite(t) || !Number.isFinite(v)) return null;
+
+      return { host, unit, t, v };
+    }
+
+    function computeKwhByHourAndSlot(readings, metersMap) {
+      // group by meter key
+      const perKey = new Map();
+      for (const r of readings) {
+        const p = parseReadingRow(r);
+        if (!p) continue;
+        const key = `${p.host}::${p.unit}`;
+        if (!perKey.has(key)) perKey.set(key, []);
+        perKey.get(key).push({ t: p.t, v: p.v });
+      }
+
+      // sort + dedup
+      for (const [k, arr] of perKey.entries()) {
+        arr.sort((a,b) => a.t - b.t);
+        const ded = [];
+        for (const pt of arr) {
+          const prev = ded[ded.length - 1];
+          if (prev && prev.t === pt.t) ded[ded.length - 1] = pt;
+          else ded.push(pt);
+        }
+        perKey.set(k, ded);
+      }
+
+      const hourSlot = new Map(); // hourIso::slot -> kwh
+      const totalSlot = new Map();
+
+      for (const [key, series] of perKey.entries()) {
+        const meta = metersMap.get(key);
+        if (!meta) continue;
+
+        const slot = meta.slot_code || "?";
+        const mult = (meta.multiplier == null) ? 1 : Number(meta.multiplier);
+        const multiplier = Number.isFinite(mult) ? mult : 1;
+
+        for (let i=1;i<series.length;i++){
+          const prev = series[i-1];
+          const cur = series[i];
+          let delta = cur.v - prev.v;
+          if (!Number.isFinite(delta) || delta < 0) continue; // ignore resets
+          // apply multiplier if configured
+          delta = delta * multiplier;
+
+          const h = hourBucket(cur.t);
+          const hk = `${h}::${slot}`;
+          hourSlot.set(hk, (hourSlot.get(hk) || 0) + delta);
+          totalSlot.set(slot, (totalSlot.get(slot) || 0) + delta);
+        }
+      }
+
+      // slots sorted by total desc
+      const slots = Array.from(totalSlot.entries()).sort((a,b)=>b[1]-a[1]).map(([s])=>s);
+
+      // hours sorted
+      const hoursSet = new Set();
+      for (const hk of hourSlot.keys()) hoursSet.add(hk.split("::")[0]);
+      const hours = Array.from(hoursSet).sort();
+
+      const labels = hours.map(formatHourLabel);
+      const datasets = slots.map(slot => ({
+        label: slot,
+        data: hours.map(h => {
+          const hk = `${h}::${slot}`;
+          const v = hourSlot.get(hk) || 0;
+          return Math.round(v * 1000) / 1000;
+        }),
+        stack: "kwh"
+      }));
+
+      const totals = slots.map(slot => ({
+        slot_code: slot,
+        kwh: Math.round((totalSlot.get(slot) || 0) * 1000) / 1000
+      }));
+
+      return { labels, datasets, totals };
+    }
+
+    async function refreshDashboard() {
+      showError("dash-error", "");
+      totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>`;
+      try {
+        const range = periodToRange(dashPeriod.value);
+        const payload = await apiFetch("/api/readings/query", {
+          method: "POST",
+          body: JSON.stringify({ start: range.start, end: range.end, granularity: "hour" })
+        });
+        renderDashboardFromMatrix(payload);
+        setApiStatus(true);
+      } catch (e) {
+        showError("dash-error", e.message || String(e));
+        totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">No data</td></tr>`;
+        renderChart([], []);
+        setApiStatus(false);
+      }
+    }
+
+    
+    function renderDashboardFromMatrix(payload) {
+      const buckets = payload?.buckets || [];
+      const slots = payload?.slots || [];
+      const matrix = payload?.matrix || [];
+
+      const labels = buckets.map(b => formatHourLabel(b));
+
+      const datasets = slots.map((slot, colIdx) => ({
+        label: slot,
+        data: matrix.map(row => Number(row?.[colIdx] || 0)),
+        stack: "kwh",
+      }));
+
+      const totals = slots.map((slot, colIdx) => {
+        let sum = 0;
+        for (const row of matrix) sum += Number(row?.[colIdx] || 0);
+        return { slot_code: slot, kwh: Math.round(sum * 1000) / 1000 };
+      }).sort((a,b) => b.kwh - a.kwh);
+
+      renderTotals(totals);
+      renderChart(labels, datasets);
+    }
+
+function renderTotals(totals) {
+      totalsBody.innerHTML = "";
+      if (!totals.length) {
+        totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">No data</td></tr>`;
+        return;
+      }
+      for (const t of totals) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(t.slot_code)}</td>
+          <td class="mono" style="text-align:right;">${escapeHtml(t.kwh.toLocaleString(undefined,{minimumFractionDigits:3, maximumFractionDigits:3}))}</td>
+        `;
+        totalsBody.appendChild(tr);
+      }
+    }
+
+    function renderChart(labels, datasets) {
+      const ctx = document.getElementById("kwhChart").getContext("2d");
+      if (dashChart) dashChart.destroy();
+
+      dashChart = new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#E7EEF9" } },
+            tooltip: {
+              backgroundColor: "rgba(15,23,42,.98)",
+              borderColor: "rgba(31,42,68,.9)",
+              borderWidth: 1,
+              titleColor: "#E7EEF9",
+              bodyColor: "#E7EEF9"
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              ticks: { color: "#93A4BD", maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+              grid: { color: "rgba(31,42,68,.35)" }
+            },
+            y: {
+              stacked: true,
+              ticks: { color: "#93A4BD" },
+              grid: { color: "rgba(31,42,68,.35)" }
+            }
+          }
+        }
+      });
+    }
+
+    // -------------------- Utilities --------------------
+    function escapeHtml(s){
+      return String(s)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+    function escapeAttr(s){ return escapeHtml(s).replaceAll("\n"," "); }
+
+    // -------------------- Boot --------------------
+    (async function boot(){
+      try { await apiFetch("/health"); setApiStatus(true); }
+      catch (_) { setApiStatus(false); }
+      await loadGateways();
+    })();
+  </script>
+</body>
+</html>

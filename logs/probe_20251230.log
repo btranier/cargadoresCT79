@@ -1,0 +1,470 @@
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T11:04:23.545695+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno 111] Connection refused>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T11:15:00.000111+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T11:30:00.000096+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T11:45:00.000088+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T12:00:00.000089+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T12:15:00.000111+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T12:30:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T12:45:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T13:00:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T13:15:00.000088+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno 111] Connection refused>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T13:30:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T13:45:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T14:00:00.000088+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T14:15:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T14:30:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T14:45:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T15:00:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T15:15:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T15:30:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T15:45:00.000101+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T16:00:00.000087+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T16:15:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T16:30:00.000091+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T16:45:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T17:00:00.000087+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T17:15:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T17:30:00.000083+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T17:45:00.000389+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T18:00:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T18:15:00.000083+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T18:30:00.000091+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T18:45:00.000089+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T19:00:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T19:15:00.000083+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T19:30:00.001133+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T19:45:00.000083+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T20:00:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T20:15:00.000124+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T20:30:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T20:45:00.000086+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T21:00:00.000423+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T21:15:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T21:30:00.000163+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T21:45:00.000122+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T22:00:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T22:15:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T22:30:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T22:45:00.000085+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+
+[finalize] 2025-12-30T23:50:00.000097 status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T23:00:00.000342+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T23:15:00.000087+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T23:30:00.000084+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20251230.csv
+
+=== RUN 2025-12-30T23:45:00.000092+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>

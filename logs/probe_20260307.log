@@ -1,0 +1,9 @@
+[GATEWAY ERROR] 192.168.1.101:502 :: timed out
+[GATEWAY ERROR] 192.168.1.102:502 :: timed out
+[GATEWAY ERROR] 192.168.1.103:502 :: timed out
+[GATEWAY ERROR] 192.168.1.104:502 :: timed out
+[DONE] Appended rows to /app/logs/readings_20260307.csv
+
+=== RUN 2026-03-07T10:04:09.502164+00:00 ===
+
+[ingest] status=0 resp=<urlopen error [Errno -2] Name or service not known>

@@ -1,0 +1,5 @@
+timestamp_utc,gateway,unit,device_uid,volt_v,current_a,power_kw,freq_hz,pf,kwh_import,ok,error
+2026-03-07T10:04:09Z,192.168.1.101:502,0,,,,,,,,False,timed out
+2026-03-07T10:04:11Z,192.168.1.102:502,0,,,,,,,,False,timed out
+2026-03-07T10:04:13Z,192.168.1.103:502,0,,,,,,,,False,timed out
+2026-03-07T10:04:15Z,192.168.1.104:502,0,,,,,,,,False,timed out
