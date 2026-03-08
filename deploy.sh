@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REF="${1:-main}"
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -21,26 +19,80 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[1/7] Fetching latest refs..."
+# Resolve project root robustly across environments.
+# Priority:
+#   1) DEPLOY_ROOT env override
+#   2) git toplevel from script directory
+#   3) script directory itself
+#   4) a nested ./cargadoresCT79 folder
+ROOT_DIR=""
+if [ -n "${DEPLOY_ROOT:-}" ] && [ -f "${DEPLOY_ROOT}/docker-compose.yml" ]; then
+  ROOT_DIR="$(cd "${DEPLOY_ROOT}" && pwd)"
+else
+  GIT_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+  for candidate in "$GIT_ROOT" "$SCRIPT_DIR" "$SCRIPT_DIR/cargadoresCT79"; do
+    if [ -n "$candidate" ] && [ -f "$candidate/docker-compose.yml" ]; then
+      ROOT_DIR="$(cd "$candidate" && pwd)"
+      break
+    fi
+  done
+fi
+
+if [ -z "$ROOT_DIR" ]; then
+  echo "Error: could not locate project root with docker-compose.yml." >&2
+  echo "Hint: run with DEPLOY_ROOT=/path/to/repo ./deploy ${REF}" >&2
+  exit 1
+fi
+
+cd "$ROOT_DIR"
+
+echo "[1/9] Using project root: $ROOT_DIR"
+
+echo "[2/9] Fetching latest refs..."
 git fetch --all --prune
 
-echo "[2/7] Checking out ${REF}..."
+echo "[3/9] Checking out ${REF}..."
 git checkout "$REF"
 
-echo "[3/7] Pulling latest commit from origin/${REF}..."
+echo "[4/9] Pulling latest commit from origin/${REF}..."
 git pull --ff-only origin "$REF"
 
-echo "[4/7] Stopping current project containers..."
-docker compose down --remove-orphans
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 
-echo "[5/7] Rebuilding images..."
-docker compose build --pull
+compose() {
+  docker compose --project-directory "$ROOT_DIR" -f "$COMPOSE_FILE" "$@"
+}
 
-echo "[6/7] Starting containers..."
-docker compose up -d
+echo "[5/9] Validating compose configuration..."
+compose config >/dev/null
 
-echo "[7/7] Current container status:"
-docker compose ps
+echo "[6/9] Stopping current project containers..."
+compose down --remove-orphans
+
+echo "[7/9] Rebuilding images (when Dockerfile/build context is available)..."
+BUILD_LOG="$(mktemp)"
+if compose build --pull >"$BUILD_LOG" 2>&1; then
+  cat "$BUILD_LOG"
+  echo "Build step completed successfully."
+else
+  cat "$BUILD_LOG"
+  if grep -Eqi "failed to read dockerfile|dockerfile: no such file or directory|open .*Dockerfile: no such file or directory" "$BUILD_LOG"; then
+    echo "Warning: Dockerfile not found for one or more build services."
+    echo "Continuing with image pull + startup (this preserves legacy setups without local Dockerfile)."
+  else
+    echo "Error: docker compose build failed." >&2
+    rm -f "$BUILD_LOG"
+    exit 1
+  fi
+fi
+rm -f "$BUILD_LOG"
+
+echo "[8/9] Pulling published images (if any)..."
+compose pull --ignore-buildable || true
+
+echo "[9/9] Starting containers and showing status..."
+compose up -d
+compose ps
 
 echo
 printf 'Deploy complete on ref %s\n' "$REF"
