@@ -30,17 +30,37 @@ git checkout "$REF"
 echo "[3/7] Pulling latest commit from origin/${REF}..."
 git pull --ff-only origin "$REF"
 
-echo "[4/7] Stopping current project containers..."
-docker compose down --remove-orphans
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+DOCKERFILE_PATH="$ROOT_DIR/Dockerfile"
 
-echo "[5/7] Rebuilding images..."
-docker compose build --pull
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "Error: docker compose file not found at $COMPOSE_FILE" >&2
+  exit 1
+fi
 
-echo "[6/7] Starting containers..."
-docker compose up -d
+if [ ! -f "$DOCKERFILE_PATH" ]; then
+  echo "Error: Dockerfile not found at $DOCKERFILE_PATH" >&2
+  exit 1
+fi
 
-echo "[7/7] Current container status:"
-docker compose ps
+compose() {
+  docker compose --project-directory "$ROOT_DIR" -f "$COMPOSE_FILE" "$@"
+}
+
+echo "[4/8] Validating compose configuration..."
+compose config >/dev/null
+
+echo "[5/8] Stopping current project containers..."
+compose down --remove-orphans
+
+echo "[6/8] Rebuilding images..."
+compose build --pull
+
+echo "[7/8] Starting containers..."
+compose up -d
+
+echo "[8/8] Current container status:"
+compose ps
 
 echo
 printf 'Deploy complete on ref %s\n' "$REF"
