@@ -295,10 +295,14 @@ def _ensure_ingest_tables():
             conn.execute(text("ALTER TABLE meters ADD COLUMN parking_slot TEXT"))
         if "is_active" not in meter_cols:
             conn.execute(text("ALTER TABLE meters ADD COLUMN is_active INTEGER DEFAULT 1"))
+        if "device_uid" not in meter_cols:
+            conn.execute(text("ALTER TABLE meters ADD COLUMN device_uid TEXT"))
         if "deviceID" not in meter_cols:
             conn.execute(text("ALTER TABLE meters ADD COLUMN \"deviceID\" TEXT"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_meters_deviceID ON meters(\"deviceID\")"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_meters_device_uid ON meters(device_uid)"))
         conn.execute(text("UPDATE meters SET \"deviceID\" = device_uid WHERE \"deviceID\" IS NULL AND device_uid IS NOT NULL"))
+        conn.execute(text("UPDATE meters SET device_uid = \"deviceID\" WHERE device_uid IS NULL AND \"deviceID\" IS NOT NULL"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS exec_logs (
