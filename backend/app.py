@@ -5,10 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import select, and_, or_, text
 from typing import Optional
 import os, json
+from collections import defaultdict
 
 from .db import SessionLocal, init_db, engine, Gateway, Meter, Reading
 
@@ -99,6 +100,11 @@ class QueryBody(BaseModel):
     granularity: str = "15min"
     only_active: bool = True
 
+
+class DashboardQueryBody(BaseModel):
+    start: str
+    end: str
+
 @app.get("/api/readings/latest")
 @app.get("/readings/latest")
 def readings_latest(limit: int = 200):
@@ -171,6 +177,138 @@ def readings_query(body: QueryBody):
         for b in buckets:
             out["matrix"].append([ round(series.get((b,s),0.0),3) for s in slots ])
         return out
+
+
+@app.post("/api/dashboard/analytics")
+def dashboard_analytics(body: DashboardQueryBody):
+    start = datetime.fromisoformat(body.start.replace("Z", "+00:00")).replace(tzinfo=None)
+    end = datetime.fromisoformat(body.end.replace("Z", "+00:00")).replace(tzinfo=None)
+    if start >= end:
+        raise HTTPException(status_code=400, detail="start must be before end")
+
+    def b15(ts: datetime):
+        return ts.replace(minute=(ts.minute // 15) * 15, second=0, microsecond=0)
+
+    def bhour(ts: datetime):
+        return ts.replace(minute=0, second=0, microsecond=0)
+
+    with SessionLocal() as db:
+        meters = db.execute(select(Meter).order_by(Meter.id)).scalars().all()
+        gateways = db.execute(select(Gateway).order_by(Gateway.id)).scalars().all()
+        gw_by_id = {g.id: g for g in gateways}
+
+        meter_map = {}
+        for m in meters:
+            if m.gateway_id is None or m.unit_id is None:
+                continue
+            meter_map[(int(m.gateway_id), int(m.unit_id))] = m
+
+        rows = db.execute(
+            select(Reading)
+            .where(and_(Reading.ts_utc >= start, Reading.ts_utc < end))
+            .order_by(Reading.ts_utc)
+        ).scalars().all()
+
+    kw_per_15 = defaultdict(float)
+    active_meters_per_15 = defaultdict(set)
+    meter_hour_bounds = {}
+    unmapped = defaultdict(int)
+
+    for r in rows:
+        if r.gateway_id is None or r.unit_id is None:
+            continue
+
+        key = (int(r.gateway_id), int(r.unit_id))
+        meter = meter_map.get(key)
+
+        if meter is None:
+            if r.kwh_import is not None and float(r.kwh_import) > 2:
+                unmapped[key] += 1
+            continue
+
+        if r.power_kw is not None:
+            p = float(r.power_kw)
+            bucket_15 = b15(r.ts_utc)
+            kw_per_15[bucket_15] += p
+            if p > 0.5:
+                active_meters_per_15[bucket_15].add(key)
+
+        if r.kwh_import is None:
+            continue
+        ts_m = r.ts_utc.replace(second=0, microsecond=0)
+        if ts_m.minute < 2:
+            continue
+        hour = bhour(ts_m)
+        mhk = (key, hour)
+        kwh = float(r.kwh_import)
+        prev = meter_hour_bounds.get(mhk)
+        if prev is None:
+            meter_hour_bounds[mhk] = {
+                "first_ts": ts_m,
+                "first_kwh": kwh,
+                "last_ts": ts_m,
+                "last_kwh": kwh,
+            }
+        else:
+            if ts_m <= prev["first_ts"]:
+                prev["first_ts"] = ts_m
+                prev["first_kwh"] = kwh
+            if ts_m >= prev["last_ts"]:
+                prev["last_ts"] = ts_m
+                prev["last_kwh"] = kwh
+
+    hour_slot_kwh = defaultdict(float)
+    total_slot_kwh = defaultdict(float)
+    for (key, hour), bound in meter_hour_bounds.items():
+        delta = bound["last_kwh"] - bound["first_kwh"]
+        if delta < 0:
+            continue
+        meter = meter_map.get(key)
+        if meter is None:
+            continue
+        mult = 1.0 if meter.multiplier is None else float(meter.multiplier)
+        delta = delta * mult
+        slot = meter.slot_code or f"G{key[0]}-U{key[1]}"
+        hour_slot_kwh[(hour, slot)] += delta
+        total_slot_kwh[slot] += delta
+
+    timeline_hours = []
+    h = bhour(start)
+    while h < end:
+        timeline_hours.append(h)
+        h = h + timedelta(hours=1)
+
+    slots = [s for s, _ in sorted(total_slot_kwh.items(), key=lambda x: x[1], reverse=True)]
+    matrix = []
+    for hour in timeline_hours:
+        matrix.append([round(hour_slot_kwh.get((hour, s), 0.0), 3) for s in slots])
+
+    max_kw = max(kw_per_15.values()) if kw_per_15 else 0.0
+    max_active_meters = max((len(v) for v in active_meters_per_15.values()), default=0)
+    total_kwh = sum(total_slot_kwh.values())
+
+    unmapped_list = []
+    for (gid, unit_id), count in sorted(unmapped.items(), key=lambda x: x[1], reverse=True):
+        gw = gw_by_id.get(gid)
+        gw_label = f"{gw.host}:{gw.port}" if gw else f"gateway_id={gid}"
+        unmapped_list.append({"gateway": gw_label, "unit_id": unit_id, "readings": count})
+
+    return {
+        "buckets": [x.isoformat() for x in timeline_hours],
+        "slots": slots,
+        "matrix": matrix,
+        "kpis": {
+            "total_kwh": round(total_kwh, 3),
+            "max_kw": round(max_kw, 3),
+            "max_active_meters": int(max_active_meters),
+        },
+        "config": {
+            "gateways": len(gateways),
+            "meters": len(meter_map),
+            "unmapped_meters": len(unmapped_list),
+            "unmapped_list": unmapped_list,
+        },
+    }
 
 @app.get("/api/admin/poller_state")
 def poller_state():
