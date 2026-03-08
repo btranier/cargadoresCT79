@@ -306,6 +306,7 @@
                   <tr>
                     <th>mid</th>
                     <th>unit_id</th>
+                    <th>deviceID</th>
                     <th>slot_code</th>
                     <th>owner</th>
                     <th>parking_slot</th>
@@ -454,6 +455,7 @@
                     <th>ts_utc</th>
                     <th>gateway_id</th>
                     <th>unit_id</th>
+                    <th>deviceID</th>
                     <th>slot_code</th>
                     <th>owner</th>
                     <th>parking</th>
@@ -696,7 +698,7 @@
 
     async function loadMeters() {
       showError("config-error", "");
-      metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">Loading...</td></tr>`;
+      metersBody.innerHTML = `<tr><td colspan="9" style="color:var(--muted);">Loading...</td></tr>`;
       selectedMeter = null;
       btnEditMeter.disabled = true;
 
@@ -723,7 +725,7 @@
     function renderMeters() {
       metersBody.innerHTML = "";
       if (!meters.length) {
-        metersBody.innerHTML = `<tr><td colspan="8" style="color:var(--muted);">${selectedGateway ? "No meters" : "Select a gateway"}</td></tr>`;
+        metersBody.innerHTML = `<tr><td colspan="9" style="color:var(--muted);">${selectedGateway ? "No meters" : "Select a gateway"}</td></tr>`;
         return;
       }
 
@@ -737,6 +739,7 @@
         tr.innerHTML = `
           <td class="mono">${escapeHtml(String(mid ?? "-"))}</td>
           <td class="mono">${escapeHtml(String(m.unit_id ?? "-"))}</td>
+          <td class="mono">${escapeHtml(String(m.deviceID ?? m.device_uid ?? "-"))}</td>
           <td class="mono">${escapeHtml(String(m.slot_code ?? "-"))}</td>
           <td>${escapeHtml(String(m.owner_name ?? m.description ?? "-"))}</td>
           <td class="mono">${escapeHtml(String(m.parking_slot ?? m.slot_code ?? "-"))}</td>
@@ -1023,14 +1026,14 @@
 
     async function loadLatestReadings() {
       showError("readings-error", "");
-      readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">Loading...</td></tr>`;
+      readingsBody.innerHTML = `<tr><td colspan="14" style="color:var(--muted);">Loading...</td></tr>`;
       try {
         const rows = await apiFetchAny(["/api/readings/latest?limit=500", "/readings/latest?limit=500"]);
         renderReadings(rows || []);
         setApiStatus(true);
       } catch (e) {
         showError("readings-error", e.message || String(e));
-        readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">No data</td></tr>`;
+        readingsBody.innerHTML = `<tr><td colspan="14" style="color:var(--muted);">No data</td></tr>`;
         setApiStatus(false);
       }
     }
@@ -1038,7 +1041,7 @@
     function renderReadings(rows) {
       readingsBody.innerHTML = "";
       if (!rows.length) {
-        readingsBody.innerHTML = `<tr><td colspan="13" style="color:var(--muted);">No rows</td></tr>`;
+        readingsBody.innerHTML = `<tr><td colspan="14" style="color:var(--muted);">No rows</td></tr>`;
         return;
       }
       for (const r of rows) {
@@ -1047,6 +1050,7 @@
           <td class="mono">${escapeHtml(r.ts_utc || "")}</td>
           <td class="mono">${escapeHtml(String(r.gateway_id ?? ""))}</td>
           <td class="mono">${escapeHtml(String(r.unit_id ?? ""))}</td>
+          <td class="mono">${escapeHtml(String(r.deviceID ?? ""))}</td>
           <td class="mono">${escapeHtml(r.slot_code || "")}</td>
           <td>${escapeHtml(r.owner_name || "")}</td>
           <td>${escapeHtml(r.parking_slot || "")}</td>
