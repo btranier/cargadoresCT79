@@ -46,6 +46,18 @@ fi
 
 cd "$ROOT_DIR"
 
+echo "[1/9] Using project root: $ROOT_DIR"
+
+echo "[2/9] Fetching latest refs..."
+git fetch --all --prune
+
+echo "[3/9] Checking out ${REF}..."
+git checkout "$REF"
+
+echo "[4/9] Pulling latest commit from origin/${REF}..."
+git pull --ff-only origin "$REF"
+
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 echo "[1/8] Using project root: $ROOT_DIR"
 
 echo "[2/8] Fetching latest refs..."
@@ -74,19 +86,35 @@ compose() {
   docker compose --project-directory "$ROOT_DIR" -f "$COMPOSE_FILE" "$@"
 }
 
-echo "[4/8] Validating compose configuration..."
+echo "[5/9] Validating compose configuration..."
 compose config >/dev/null
 
-echo "[5/8] Stopping current project containers..."
+echo "[6/9] Stopping current project containers..."
 compose down --remove-orphans
 
-echo "[6/8] Rebuilding images..."
-compose build --pull
+echo "[7/9] Rebuilding images (when Dockerfile/build context is available)..."
+BUILD_LOG="$(mktemp)"
+if compose build --pull >"$BUILD_LOG" 2>&1; then
+  cat "$BUILD_LOG"
+  echo "Build step completed successfully."
+else
+  cat "$BUILD_LOG"
+  if grep -Eqi "failed to read dockerfile|dockerfile: no such file or directory|open .*Dockerfile: no such file or directory" "$BUILD_LOG"; then
+    echo "Warning: Dockerfile not found for one or more build services."
+    echo "Continuing with image pull + startup (this preserves legacy setups without local Dockerfile)."
+  else
+    echo "Error: docker compose build failed." >&2
+    rm -f "$BUILD_LOG"
+    exit 1
+  fi
+fi
+rm -f "$BUILD_LOG"
 
-echo "[7/8] Starting containers..."
+echo "[8/9] Pulling published images (if any)..."
+compose pull --ignore-buildable || true
+
+echo "[9/9] Starting containers and showing status..."
 compose up -d
-
-echo "[8/8] Current container status:"
 compose ps
 
 echo
