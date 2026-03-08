@@ -432,20 +432,21 @@
           <div class="card-b">
             <div>Gateways: <span class="mono" id="dash-gw-count">0</span></div>
             <div>Meters: <span class="mono" id="dash-meter-count">0</span></div>
+            <div style="margin-top:8px; color:#ff6b6b;">Unmapped meters: <span class="mono" id="dash-unmapped-count">0</span></div>
+            <div id="dash-unmapped-list" class="mono" style="margin-top:6px; font-size:12px; color:#ff6b6b; max-height:120px; overflow:auto;"></div>
           </div>
         </div>
 
         <div class="card col-9">
           <div class="card-h">
-            <div class="card-title">Cumulative consumption by active meter (15 min)</div>
+            <div class="card-title">Hourly kWh by active meter</div>
           </div>
           <div class="card-b">
             <div class="chart-wrap">
               <canvas id="kwhChart"></canvas>
               <div class="hint">
-                Uses <span class="mono">POST /api/readings/query</span> with body:
-                <span class="mono">{ start, end, granularity: \"15min\", only_active: true }</span>
-                (per swagger).
+                Uses <span class="mono">POST /api/dashboard/analytics</span> and computes hourly kWh as
+                <span class="mono">last(kwh_import)-first(kwh_import)</span> per hour.
               </div>
             </div>
           </div>
@@ -1022,6 +1023,8 @@
     const totalsBody = document.getElementById("totals-body");
     const dashGwCount = document.getElementById("dash-gw-count");
     const dashMeterCount = document.getElementById("dash-meter-count");
+    const dashUnmappedCount = document.getElementById("dash-unmapped-count");
+    const dashUnmappedList = document.getElementById("dash-unmapped-list");
     const kpiTotalKwh = document.getElementById("kpi-total-kwh");
     const kpiMaxKw = document.getElementById("kpi-max-kw");
     const kpiMaxActiveMeters = document.getElementById("kpi-max-active-meters");
@@ -1161,12 +1164,6 @@
       return { start: start.toISOString(), end: end.toISOString() };
     }
 
-    function hourBucket(isoOrMs) {
-      const d = new Date(isoOrMs);
-      d.setMinutes(0,0,0);
-      return d.toISOString();
-    }
-
     function formatHourLabel(iso) {
       const d = new Date(iso);
       const hh = String(d.getHours()).padStart(2,"0");
@@ -1175,164 +1172,39 @@
       return `${hh}:00 ${dd}/${mm}`;
     }
 
-    async function loadConfigJoin() {
-      const gw = await apiFetch("/api/config/gateways");
-      const gws = Array.isArray(gw) ? gw : (gw?.gateways || []);
-      const map = new Map();
-
-      for (const g of gws) {
-        const gid = gatewayId(g);
-        if (gid == null) continue;
-        const m = await apiFetch(`/api/config/gateways/${encodeURIComponent(gid)}/meters`);
-        const meters = Array.isArray(m) ? m : (m?.meters || []);
-
-        for (const meter of meters) {
-          const host = gatewayHost(g); // join key uses gateway_host per your requirement
-          const unit = meter.unit_id != null ? String(meter.unit_id) : "";
-          if (!host || !unit) continue;
-          const key = `${host}::${unit}`;
-          map.set(key, { slot_code: meter.slot_code ?? "?", multiplier: meter.multiplier ?? null });
-        }
-      }
-
-      dashGwCount.textContent = String(gws.length);
-      dashMeterCount.textContent = String(map.size);
-      return { gws, metersMap: map };
-    }
-
-    async function loadReadings(range) {
-      // Swagger QueryBody: { start: string, end: string, granularity: string (default hour) }
-      const body = { start: range.start, end: range.end, granularity: "15min", only_active: true };
-      const data = await apiFetch("/api/readings/query", { method: "POST", body: JSON.stringify(body) });
-      // Unknown schema; accept common containers
-      return Array.isArray(data) ? data : (data?.readings || data?.rows || data?.data || []);
-    }
-
-    function parseReadingRow(r) {
-      // Join requirement: meters+readings by gateway ip address (gateway_host) and unit_id
-      const host = r.gateway_host ?? r.gateway_ip ?? r.host ?? r.ip;
-      const unit = (r.unit_id != null) ? String(r.unit_id) : null;
-
-      // Timestamp field (unknown); attempt common keys
-      const ts = r.ts ?? r.timestamp ?? r.time ?? r.created_at ?? r.at;
-
-      // Reading value (unknown); attempt common keys
-      const val = r.value ?? r.reading ?? r.reading_value ?? r.energy ?? r.kwh;
-
-      if (!host || unit == null || ts == null || val == null) return null;
-
-      const t = (typeof ts === "number") ? ts : new Date(ts).getTime();
-      const v = Number(val);
-      if (!Number.isFinite(t) || !Number.isFinite(v)) return null;
-
-      return { host, unit, t, v };
-    }
-
-    function computeKwhByHourAndSlot(readings, metersMap) {
-      // group by meter key
-      const perKey = new Map();
-      for (const r of readings) {
-        const p = parseReadingRow(r);
-        if (!p) continue;
-        const key = `${p.host}::${p.unit}`;
-        if (!perKey.has(key)) perKey.set(key, []);
-        perKey.get(key).push({ t: p.t, v: p.v });
-      }
-
-      // sort + dedup
-      for (const [k, arr] of perKey.entries()) {
-        arr.sort((a,b) => a.t - b.t);
-        const ded = [];
-        for (const pt of arr) {
-          const prev = ded[ded.length - 1];
-          if (prev && prev.t === pt.t) ded[ded.length - 1] = pt;
-          else ded.push(pt);
-        }
-        perKey.set(k, ded);
-      }
-
-      const hourSlot = new Map(); // hourIso::slot -> kwh
-      const totalSlot = new Map();
-
-      for (const [key, series] of perKey.entries()) {
-        const meta = metersMap.get(key);
-        if (!meta) continue;
-
-        const slot = meta.slot_code || "?";
-        const mult = (meta.multiplier == null) ? 1 : Number(meta.multiplier);
-        const multiplier = Number.isFinite(mult) ? mult : 1;
-
-        for (let i=1;i<series.length;i++){
-          const prev = series[i-1];
-          const cur = series[i];
-          let delta = cur.v - prev.v;
-          if (!Number.isFinite(delta) || delta < 0) continue; // ignore resets
-          // apply multiplier if configured
-          delta = delta * multiplier;
-
-          const h = hourBucket(cur.t);
-          const hk = `${h}::${slot}`;
-          hourSlot.set(hk, (hourSlot.get(hk) || 0) + delta);
-          totalSlot.set(slot, (totalSlot.get(slot) || 0) + delta);
-        }
-      }
-
-      // slots sorted by total desc
-      const slots = Array.from(totalSlot.entries()).sort((a,b)=>b[1]-a[1]).map(([s])=>s);
-
-      // hours sorted
-      const hoursSet = new Set();
-      for (const hk of hourSlot.keys()) hoursSet.add(hk.split("::")[0]);
-      const hours = Array.from(hoursSet).sort();
-
-      const labels = hours.map(formatHourLabel);
-      const datasets = slots.map(slot => ({
-        label: slot,
-        data: hours.map(h => {
-          const hk = `${h}::${slot}`;
-          const v = hourSlot.get(hk) || 0;
-          return Math.round(v * 1000) / 1000;
-        }),
-        stack: "kwh"
-      }));
-
-      const totals = slots.map(slot => ({
-        slot_code: slot,
-        kwh: Math.round((totalSlot.get(slot) || 0) * 1000) / 1000
-      }));
-
-      return { labels, datasets, totals };
-    }
-
     async function refreshDashboard() {
       showError("dash-error", "");
       totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>`;
       try {
         const range = getDashboardRange();
-        const payload = await apiFetchAny(["/api/readings/query", "/readings/query"], {
+        const payload = await apiFetch("/api/dashboard/analytics", {
           method: "POST",
-          body: JSON.stringify({ start: range.start, end: range.end, granularity: "15min", only_active: true })
+          body: JSON.stringify({ start: range.start, end: range.end })
         });
-        renderDashboardFromMatrix(payload);
+        renderDashboardFromMatrix(payload || {});
         setApiStatus(true);
       } catch (e) {
         showError("dash-error", e.message || String(e));
         totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">No data</td></tr>`;
-        renderKpis([]);
+        renderKpis({});
         renderChart([], []);
         renderMeterHistogram([]);
+        dashGwCount.textContent = "0";
+        dashMeterCount.textContent = "0";
+        dashUnmappedCount.textContent = "0";
+        dashUnmappedList.textContent = "";
         setApiStatus(false);
       }
     }
 
-    
     function renderDashboardFromMatrix(payload) {
       const buckets = payload?.buckets || [];
       const slots = payload?.slots || [];
       const matrix = payload?.matrix || [];
+      const kpis = payload?.kpis || {};
+      const config = payload?.config || {};
 
       const labels = buckets.map(b => formatHourLabel(b));
-
       const datasets = slots.map((slot, colIdx) => ({
         label: slot,
         data: matrix.map(row => Number(row?.[colIdx] || 0)),
@@ -1345,35 +1217,27 @@
         return { slot_code: slot, kwh: Math.round(sum * 1000) / 1000 };
       }).sort((a,b) => b.kwh - a.kwh);
 
+      dashGwCount.textContent = String(config?.gateways ?? 0);
+      dashMeterCount.textContent = String(config?.meters ?? 0);
+      dashUnmappedCount.textContent = String(config?.unmapped_meters ?? 0);
+      const unmappedList = Array.isArray(config?.unmapped_list) ? config.unmapped_list : [];
+      dashUnmappedList.innerHTML = unmappedList.length
+        ? unmappedList.map(x => `${escapeHtml(String(x.gateway))} / U${escapeHtml(String(x.unit_id))} (${escapeHtml(String(x.readings))})`).join("<br>")
+        : '<span style="color:var(--muted)">none</span>';
+
       renderTotals(totals);
-      renderKpis(matrix);
+      renderKpis(kpis);
       renderChart(labels, datasets);
       renderMeterHistogram(totals);
     }
 
-    function renderKpis(matrix) {
-      let totalKwh = 0;
-      let maxBucketKwh = 0;
-      let maxActiveMeters = 0;
-
-      for (const row of matrix) {
-        let rowSum = 0;
-        let rowActive = 0;
-        for (const v of row || []) {
-          const n = Number(v || 0);
-          if (!Number.isFinite(n) || n <= 0) continue;
-          rowSum += n;
-          rowActive += 1;
-        }
-        totalKwh += rowSum;
-        if (rowSum > maxBucketKwh) maxBucketKwh = rowSum;
-        if (rowActive > maxActiveMeters) maxActiveMeters = rowActive;
-      }
-
-      const maxKw = maxBucketKwh * 4;
+    function renderKpis(kpis) {
+      const totalKwh = Number(kpis?.total_kwh ?? 0);
+      const maxKw = Number(kpis?.max_kw ?? 0);
+      const maxActiveMeters = Number(kpis?.max_active_meters ?? 0);
       kpiTotalKwh.textContent = totalKwh.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
       kpiMaxKw.textContent = maxKw.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-      kpiMaxActiveMeters.textContent = String(maxActiveMeters);
+      kpiMaxActiveMeters.textContent = String(Math.round(maxActiveMeters));
     }
 
     function renderTotals(totals) {
