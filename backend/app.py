@@ -330,6 +330,7 @@ def serve_index():
 
 # --- Bootstrap config + ingest + admin endpoints (v7) ---
 BOOTSTRAP_CONFIG_FILE = os.environ.get("BOOTSTRAP_CONFIG_FILE", "./data/active_mapping.csv")
+AUTO_BOOTSTRAP_CONFIG = str(os.environ.get("AUTO_BOOTSTRAP_CONFIG", "0")).strip().lower() in ("1", "true", "yes", "on")
 
 def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
     if not os.path.exists(path):
@@ -415,6 +416,8 @@ def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
         return {"loaded": loaded, "reason": "ok"}
 @app.on_event("startup")
 def _startup_bootstrap_config():
+    if not AUTO_BOOTSTRAP_CONFIG:
+        return
     try:
         _bootstrap_config_from_flat_file(BOOTSTRAP_CONFIG_FILE)
     except Exception:
@@ -465,7 +468,8 @@ def _get_or_create_gateway(db, host: str, port: int):
     gw = db.query(Gateway).filter(Gateway.host==host, Gateway.port==port).first()
     if gw: return gw
     gw = Gateway(label=f"{host}:{port}", host=host, port=port)
-    db.add(gw); db.commit(); db.refresh(gw)
+    db.add(gw)
+    db.flush()
     return gw
 
 def _get_meter_id(db, gateway_id: int, unit_id: int):
@@ -488,8 +492,7 @@ def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, u
             multiplier=1.0,
         )
         db.add(m)
-        db.commit()
-        db.refresh(m)
+        db.flush()
     else:
         # Keep last-seen location (optional)
         changed = False
@@ -501,7 +504,7 @@ def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, u
             changed = True
         if changed:
             db.add(m)
-            db.commit()
+            db.flush()
     return m
 
 
@@ -521,8 +524,7 @@ async def ingest_run(payload: dict):
     duplicates = 0
 
     with SessionLocal() as db:
-        with engine.begin() as conn:
-            for r in readings:
+        for r in readings:
                 try:
                     ts = r.get("timestamp_utc")
                     gw = r.get("gateway")
@@ -552,7 +554,7 @@ async def ingest_run(payload: dict):
                         m = db.query(Meter).filter(Meter.gateway_id==gw_row.id, Meter.unit_id==unit_i).first()
                         meter_id = m.id if m else None
 
-                    res = conn.execute(text("""
+                    db.execute(text("""
                         INSERT OR IGNORE INTO readings
                         (ts_utc, gateway_id, unit_id, meter_id, volt_v, current_a, power_kw, freq_hz, pf, kwh_import, ok, error)
                         VALUES
@@ -571,7 +573,8 @@ async def ingest_run(payload: dict):
                         "ok": 1 if (str(r.get("ok")).lower() in ("1","true","yes","ok")) else 0,
                         "error": r.get("error"),
                     })
-                    if res.rowcount == 1:
+                    changed = db.execute(text("SELECT changes()")).scalar() or 0
+                    if changed == 1:
                         inserted += 1
                     else:
                         duplicates += 1
@@ -579,30 +582,31 @@ async def ingest_run(payload: dict):
                     # never break the run for a single bad row
                     continue
 
-            # exec_logs insert (always)
-            try:
-                conn.execute(text("""
-                    INSERT OR IGNORE INTO exec_logs
-                    (run_start_utc, run_end_utc, exit_code, source, csv_file, log_file, gateway_failures_json,
-                     readings_count, inserted_count, duplicate_count, log_text)
-                    VALUES
-                    (:run_start_utc, :run_end_utc, :exit_code, :source, :csv_file, :log_file, :gateway_failures_json,
-                     :readings_count, :inserted_count, :duplicate_count, :log_text)
-                """), {
-                    "run_start_utc": run_start,
-                    "run_end_utc": run_end,
-                    "exit_code": exit_code,
-                    "source": source,
-                    "csv_file": csv_file,
-                    "log_file": log_file,
-                    "gateway_failures_json": json.dumps(gw_failures),
-                    "readings_count": len(readings),
-                    "inserted_count": inserted,
-                    "duplicate_count": duplicates,
-                    "log_text": log_text,
-                })
-            except Exception:
-                pass
+        # exec_logs insert (always)
+        try:
+            db.execute(text("""
+                INSERT OR IGNORE INTO exec_logs
+                (run_start_utc, run_end_utc, exit_code, source, csv_file, log_file, gateway_failures_json,
+                 readings_count, inserted_count, duplicate_count, log_text)
+                VALUES
+                (:run_start_utc, :run_end_utc, :exit_code, :source, :csv_file, :log_file, :gateway_failures_json,
+                 :readings_count, :inserted_count, :duplicate_count, :log_text)
+            """), {
+                "run_start_utc": run_start,
+                "run_end_utc": run_end,
+                "exit_code": exit_code,
+                "source": source,
+                "csv_file": csv_file,
+                "log_file": log_file,
+                "gateway_failures_json": json.dumps(gw_failures),
+                "readings_count": len(readings),
+                "inserted_count": inserted,
+                "duplicate_count": duplicates,
+                "log_text": log_text,
+            })
+        except Exception:
+            pass
+        db.commit()
 
     return {"ok": True, "inserted": inserted, "duplicates": duplicates}
 @app.post("/api/ingest/bulk_day")

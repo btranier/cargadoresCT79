@@ -45,6 +45,9 @@ cd /path/to/cargadoresCT79
 ./deploy.sh main
 ```
 
+> Nota: la base de datos SQLite se guarda en `./data/saci.db` (volumen montado en `/app/data`).
+> No uses `docker compose down -v` si quieres conservar datos de producción.
+
 What this does:
 1. fetches latest refs from GitHub
 2. checks out the branch/ref you pass (`main` by default)
