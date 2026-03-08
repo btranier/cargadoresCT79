@@ -7,6 +7,7 @@ services:
       - DATABASE_URL=sqlite:////app/data/saci.db
       - DISABLE_POLLER=1
       - BOOTSTRAP_CONFIG_FILE=/app/data/active_mapping.csv
+      - AUTO_BOOTSTRAP_CONFIG=0
       - TZ=Europe/Madrid
     expose:
       - "10000"
