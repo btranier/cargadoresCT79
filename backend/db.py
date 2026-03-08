@@ -31,7 +31,9 @@ class Meter(Base):
     gateway_id = Column(Integer, ForeignKey("gateways.id"), nullable=True)
     unit_id = Column(Integer, nullable=True)
 
-    # New stable identity
+    # Stable identity read from incoming readings
+    device_id = Column("deviceID", String, nullable=True, unique=True)
+    # Legacy alias kept for backward compatibility in existing code paths
     device_uid = Column(String, nullable=True, unique=True)
 
     # Mapping / config fields

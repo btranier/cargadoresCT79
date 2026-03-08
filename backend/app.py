@@ -61,7 +61,7 @@ def list_meters_by_gateway(gid: int):
     with SessionLocal() as db:
         rows = db.execute(select(Meter).where(Meter.gateway_id==gid).order_by(Meter.unit_id)).scalars().all()
         return [
-            {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"slot_code":m.slot_code,
+            {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"deviceID":(m.device_id or m.device_uid),"slot_code":m.slot_code,
              "description":m.description,"phase":m.phase,"status":m.status,"multiplier":m.multiplier,
              "owner_name":m.owner_name,"parking_slot":m.parking_slot,"is_active":bool(m.is_active)}
             for m in rows
@@ -74,7 +74,7 @@ def list_all_meters():
     with SessionLocal() as db:
         rows = db.execute(select(Meter).order_by(Meter.id)).scalars().all()
         return [
-            {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"slot_code":m.slot_code,
+            {"id":m.id,"gateway_id":m.gateway_id,"unit_id":m.unit_id,"deviceID":(m.device_id or m.device_uid),"slot_code":m.slot_code,
              "description":m.description,"phase":m.phase,"status":m.status,"multiplier":m.multiplier,
              "owner_name":m.owner_name,"parking_slot":m.parking_slot,"is_active":bool(m.is_active)}
             for m in rows
@@ -104,16 +104,17 @@ class QueryBody(BaseModel):
 def readings_latest(limit: int = 200):
     with SessionLocal() as db:
         rows = db.execute(
-            select(Reading, Meter.slot_code, Meter.owner_name, Meter.parking_slot, Meter.is_active, Reading.gateway_id, Reading.unit_id)
+            select(Reading, Meter.slot_code, Meter.owner_name, Meter.parking_slot, Meter.is_active, Meter.device_id, Meter.device_uid, Reading.gateway_id, Reading.unit_id)
             .join(Meter, and_(Meter.gateway_id==Reading.gateway_id, Meter.unit_id==Reading.unit_id), isouter=True)
             .order_by(Reading.ts_utc.desc())
             .limit(limit)
         ).all()
         out=[]
-        for r, slot, owner_name, parking_slot, is_active, gwid, unitid in rows:
+        for r, slot, owner_name, parking_slot, is_active, device_id, device_uid, gwid, unitid in rows:
             out.append({
                 "ts_utc": r.ts_utc.isoformat() if r.ts_utc else None,
                 "gateway_id": gwid, "unit_id": unitid, "meter_id": r.meter_id,
+                "deviceID": device_id or device_uid,
                 "slot_code": slot,
                 "owner_name": owner_name, "parking_slot": parking_slot, "is_active": bool(is_active) if is_active is not None else None,
                 "volt_v": r.volt_v, "current_a": r.current_a, "power_kw": r.power_kw,
@@ -210,7 +211,7 @@ def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
                 host = (row.get("gateway_host") or "").strip()
                 port = int((row.get("gateway_port") or "0").strip() or 0)
                 unit_id = int((row.get("unit_id") or "0").strip() or 0)
-                device_uid = (row.get("device_uid") or row.get("meter_uid") or "").strip() or None
+                device_uid = (row.get("deviceID") or row.get("device_uid") or row.get("meter_uid") or "").strip() or None
 
                 # Allow config-by-UID even if gateway not known yet
                 if not device_uid and (not host or port <= 0 or unit_id <= 0):
@@ -227,12 +228,13 @@ def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
 
                 m = None
                 if device_uid:
-                    m = db.query(Meter).filter(Meter.device_uid==device_uid).first()
+                    m = db.query(Meter).filter((Meter.device_id==device_uid) | (Meter.device_uid==device_uid)).first()
                 if not m and gw and unit_id > 0:
                     m = db.query(Meter).filter(Meter.gateway_id==gw.id, Meter.unit_id==unit_id).first()
 
                 if not m:
                     m = Meter(
+                        device_id=device_uid,
                         device_uid=device_uid,
                         gateway_id=(gw.id if gw else None),
                         unit_id=(unit_id if unit_id > 0 else None),
@@ -293,6 +295,10 @@ def _ensure_ingest_tables():
             conn.execute(text("ALTER TABLE meters ADD COLUMN parking_slot TEXT"))
         if "is_active" not in meter_cols:
             conn.execute(text("ALTER TABLE meters ADD COLUMN is_active INTEGER DEFAULT 1"))
+        if "deviceID" not in meter_cols:
+            conn.execute(text("ALTER TABLE meters ADD COLUMN \"deviceID\" TEXT"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_meters_deviceID ON meters(\"deviceID\")"))
+        conn.execute(text("UPDATE meters SET \"deviceID\" = device_uid WHERE \"deviceID\" IS NULL AND device_uid IS NOT NULL"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS exec_logs (
@@ -327,9 +333,16 @@ def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, u
     device_uid = (device_uid or "").strip()
     if not device_uid:
         return None
-    m = db.query(Meter).filter(Meter.device_uid==device_uid).first()
+    m = db.query(Meter).filter((Meter.device_id==device_uid) | (Meter.device_uid==device_uid)).first()
     if not m:
-        m = Meter(device_uid=device_uid, gateway_id=gw_id, unit_id=unit_id, status="Activo", multiplier=1.0)
+        m = Meter(
+            device_id=device_uid,
+            device_uid=device_uid,
+            gateway_id=gw_id,
+            unit_id=unit_id,
+            status="Activo",
+            multiplier=1.0,
+        )
         db.add(m)
         db.commit()
         db.refresh(m)
@@ -370,7 +383,7 @@ async def ingest_run(payload: dict):
                     ts = r.get("timestamp_utc")
                     gw = r.get("gateway")
                     unit = r.get("unit")
-                    device_uid = r.get("device_uid") or r.get("meter_uid") or r.get("uid")
+                    device_uid = r.get("deviceID") or r.get("device_uid") or r.get("meter_uid") or r.get("uid")
 
                     # Must have timestamp + gateway. device_uid preferred, unit optional unless device_uid missing.
                     if not ts or not gw:
