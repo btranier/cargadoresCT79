@@ -58,6 +58,29 @@ echo "[4/9] Pulling latest commit from origin/${REF}..."
 git pull --ff-only origin "$REF"
 
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+echo "[1/8] Using project root: $ROOT_DIR"
+
+echo "[2/8] Fetching latest refs..."
+git fetch --all --prune
+
+echo "[3/8] Checking out ${REF}..."
+git checkout "$REF"
+
+echo "[4/8] Pulling latest commit from origin/${REF}..."
+git pull --ff-only origin "$REF"
+
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+DOCKERFILE_PATH="$ROOT_DIR/Dockerfile"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "Error: docker compose file not found at $COMPOSE_FILE" >&2
+  exit 1
+fi
+
+if [ ! -f "$DOCKERFILE_PATH" ]; then
+  echo "Error: Dockerfile not found at $DOCKERFILE_PATH" >&2
+  exit 1
+fi
 
 compose() {
   docker compose --project-directory "$ROOT_DIR" -f "$COMPOSE_FILE" "$@"
