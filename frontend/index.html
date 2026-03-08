@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SACI PI Stack • SFDC Dark</title>
+  <title>EV Charger Management - Condado de Treviño 7-9</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230B1220'/%3E%3Cpath d='M34 8 18 35h13l-3 21 18-30H33z' fill='%2300D0FF'/%3E%3C/svg%3E" />
 
   <!-- Chart.js (stacked bar) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -239,8 +240,8 @@
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <div class="brand-title">SACI PI Stack v1.4.2</div>
-          <div class="brand-sub">SFDC Dark • Config • Logs • Dashboard</div>
+          <div class="brand-title">⚡ EV Charger Management</div>
+          <div class="brand-sub">Condado de Treviño 7-9 • Config • Logs • Dashboard</div>
         </div>
       </div>
       <span class="pill">Same-origin API (/api/*)</span>
@@ -250,9 +251,9 @@
   <div class="container">
     <div class="row" style="justify-content:space-between; margin-bottom:14px;">
       <div class="tabs" role="tablist" aria-label="Main tabs">
-        <button class="tab active" data-tab="config">Config</button>
+        <button class="tab" data-tab="config">Config</button>
         <button class="tab" data-tab="logs">Logs</button>
-        <button class="tab" data-tab="dashboard">Dashboard</button>
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="readings">Readings</button>
       </div>
       <div class="row">
@@ -261,7 +262,7 @@
     </div>
 
     <!-- CONFIG -->
-    <div id="view-config" class="view">
+    <div id="view-config" class="view" style="display:none;">
       <div class="grid grid-12">
         <div class="card col-5">
           <div class="card-h">
@@ -378,23 +379,67 @@
     </div>
 
     <!-- DASHBOARD -->
-    <div id="view-dashboard" class="view" style="display:none;">
+    <div id="view-dashboard" class="view">
       <div class="grid grid-12">
-        <div class="card col-9">
+        <div class="card col-12">
           <div class="card-h">
-            <div class="card-title">Cumulative consumption by active meter (15 min)</div>
+            <div class="card-title">Dashboard analytics</div>
             <div class="row">
-              <select id="dash-period">
-                <option value="day" selected>Day</option>
-                <option value="week">Week</option>
-                <option value="month">Calendar month</option>
+              <select id="dash-period-preset" title="Period preset" style="min-width:210px;">
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="current_week">Current Week</option>
+                <option value="last_7_days" selected>Last 7 Days</option>
+                <option value="current_month">Current Month</option>
+                <option value="previous_month">Previous Month</option>
+                <option value="custom">Custom range</option>
               </select>
-              <select id="dash-month" title="Select month" style="display:none; min-width:180px;"></select>
+              <input id="dash-beg-time" type="datetime-local" title="Begin time" style="min-width:210px;" />
+              <input id="dash-end-time" type="datetime-local" title="End time" style="min-width:210px;" />
               <button class="btn" id="btn-refresh-dashboard">Refresh</button>
             </div>
           </div>
           <div class="card-b">
-            <div id="dash-error" class="err" style="display:none;"></div>
+            <div class="muted">Period filter applies to all dashboard tiles and charts (end time is exclusive; presets use full-day ranges ending at 00:00 next day).</div>
+            <div id="dash-error" class="err" style="display:none; margin-top:10px;"></div>
+          </div>
+        </div>
+
+        <div class="card col-3">
+          <div class="card-h"><div class="card-title">Total kWh (period)</div></div>
+          <div class="card-b">
+            <div class="mono" id="kpi-total-kwh" style="font-size:26px; font-weight:700;">0.000</div>
+          </div>
+        </div>
+
+        <div class="card col-3">
+          <div class="card-h"><div class="card-title">Max kW (period)</div></div>
+          <div class="card-b">
+            <div class="mono" id="kpi-max-kw" style="font-size:26px; font-weight:700;">0.000</div>
+            <div class="hint">Estimated from 15 min buckets.</div>
+          </div>
+        </div>
+
+        <div class="card col-3">
+          <div class="card-h"><div class="card-title">Max active meters</div></div>
+          <div class="card-b">
+            <div class="mono" id="kpi-max-active-meters" style="font-size:26px; font-weight:700;">0</div>
+          </div>
+        </div>
+
+        <div class="card col-3">
+          <div class="card-h"><div class="card-title">Config join</div></div>
+          <div class="card-b">
+            <div>Gateways: <span class="mono" id="dash-gw-count">0</span></div>
+            <div>Meters: <span class="mono" id="dash-meter-count">0</span></div>
+          </div>
+        </div>
+
+        <div class="card col-9">
+          <div class="card-h">
+            <div class="card-title">Cumulative consumption by active meter (15 min)</div>
+          </div>
+          <div class="card-b">
             <div class="chart-wrap">
               <canvas id="kwhChart"></canvas>
               <div class="hint">
@@ -422,15 +467,17 @@
                 <tbody id="totals-body"></tbody>
               </table>
             </div>
+          </div>
+        </div>
 
-            <div class="card" style="margin-top:12px; background: rgba(11,18,32,.7);">
-              <div class="card-b">
-                <div class="muted">Config join</div>
-                <div style="margin-top:6px;">Gateways: <span class="mono" id="dash-gw-count">0</span></div>
-                <div>Meters: <span class="mono" id="dash-meter-count">0</span></div>
-              </div>
+        <div class="card col-12">
+          <div class="card-h">
+            <div class="card-title">Histogram: cumulative kWh per meter</div>
+          </div>
+          <div class="card-b">
+            <div class="chart-wrap" style="height:320px;">
+              <canvas id="meterHistogramChart"></canvas>
             </div>
-
           </div>
         </div>
       </div>
@@ -658,6 +705,7 @@
         const loaded = data?.result?.loaded ?? 0;
         showError("config-error", `Imported mapping: ${loaded} meter rows (${data?.file || "file"})`);
         await loadGateways();
+        await refreshDashboard();
       } catch (e) {
         showError("config-error", `Import failed: ${e.message || String(e)}`);
       } finally {
@@ -965,59 +1013,81 @@
 
     // -------------------- Dashboard --------------------
     let dashChart = null;
+    let meterHistogramChart = null;
 
-    const dashPeriod = document.getElementById("dash-period");
-    const dashMonth = document.getElementById("dash-month");
+    const dashPeriodPreset = document.getElementById("dash-period-preset");
+    const dashBegTime = document.getElementById("dash-beg-time");
+    const dashEndTime = document.getElementById("dash-end-time");
     const btnRefreshDashboard = document.getElementById("btn-refresh-dashboard");
     const totalsBody = document.getElementById("totals-body");
     const dashGwCount = document.getElementById("dash-gw-count");
     const dashMeterCount = document.getElementById("dash-meter-count");
+    const kpiTotalKwh = document.getElementById("kpi-total-kwh");
+    const kpiMaxKw = document.getElementById("kpi-max-kw");
+    const kpiMaxActiveMeters = document.getElementById("kpi-max-active-meters");
 
-    dashPeriod.addEventListener("change", () => {
-      updateDashMonthVisibility();
+    dashPeriodPreset.addEventListener("change", () => {
+      applyPresetToInputs(dashPeriodPreset.value);
       refreshDashboard();
     });
-    dashMonth.addEventListener("change", () => refreshDashboard());
+    dashBegTime.addEventListener("change", () => {
+      if (dashPeriodPreset.value !== "custom") dashPeriodPreset.value = "custom";
+      refreshDashboard();
+    });
+    dashEndTime.addEventListener("change", () => {
+      if (dashPeriodPreset.value !== "custom") dashPeriodPreset.value = "custom";
+      refreshDashboard();
+    });
     btnRefreshDashboard.addEventListener("click", () => refreshDashboard());
 
-    function monthIso(year, monthIndex) {
-      return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    function toDatetimeLocalValue(d) {
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
-    function monthLabel(year, monthIndex) {
-      return new Date(year, monthIndex, 1).toLocaleDateString(undefined, {
-        month: "long",
-        year: "numeric"
-      });
+    function startOfDay(d) {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x;
     }
 
-    function initDashMonthOptions() {
+    function startOfNextDay(d) {
+      const x = startOfDay(d);
+      x.setDate(x.getDate() + 1);
+      return x;
+    }
+
+    function applyPresetToInputs(preset) {
       const now = new Date();
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const options = [];
+      const tomorrowStart = startOfNextDay(now);
+      let start = new Date(now);
+      let end = new Date(tomorrowStart);
 
-      for (let i = 0; i <= 12; i++) {
-        const d = new Date(currentMonthStart);
-        d.setMonth(currentMonthStart.getMonth() - i);
-        options.push({
-          value: monthIso(d.getFullYear(), d.getMonth()),
-          label: monthLabel(d.getFullYear(), d.getMonth())
-        });
+      if (preset === "today") {
+        start = startOfDay(now);
+      } else if (preset === "yesterday") {
+        const y = new Date(now);
+        y.setDate(y.getDate() - 1);
+        start = startOfDay(y);
+        end = startOfDay(now);
+      } else if (preset === "current_week") {
+        start = startOfDay(now);
+        const day = (start.getDay() + 6) % 7;
+        start.setDate(start.getDate() - day);
+      } else if (preset === "last_7_days") {
+        start = startOfDay(now);
+        start.setDate(start.getDate() - 6);
+      } else if (preset === "current_month") {
+        start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      } else if (preset === "previous_month") {
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+        end = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      } else {
+        return;
       }
 
-      dashMonth.innerHTML = "";
-      options.forEach(({ value, label }) => {
-        const opt = document.createElement("option");
-        opt.value = value;
-        opt.textContent = label;
-        dashMonth.appendChild(opt);
-      });
-
-      if (options.length) dashMonth.value = options[0].value;
-    }
-
-    function updateDashMonthVisibility() {
-      dashMonth.style.display = (dashPeriod.value === "month") ? "inline-flex" : "none";
+      dashBegTime.value = toDatetimeLocalValue(start);
+      dashEndTime.value = toDatetimeLocalValue(end);
     }
 
     // -------------------- Readings (Latest 500) --------------------
@@ -1077,25 +1147,17 @@
 
 
 
-    function periodToRange(period) {
-      const end = new Date();
-      const start = new Date(end);
-      if (period === "day") {
-        start.setHours(0, 0, 0, 0);
-      } else if (period === "week") {
-        start.setDate(end.getDate() - 6);
-        start.setHours(0, 0, 0, 0);
-      } else {
-        const monthValue = dashMonth.value;
-        if (monthValue) {
-          const [y, m] = monthValue.split("-").map(Number);
-          const monthStart = new Date(y, m - 1, 1);
-          const nextMonthStart = new Date(y, m, 1);
-          return { start: monthStart.toISOString(), end: nextMonthStart.toISOString() };
-        }
-        start.setDate(1);
-        start.setHours(0, 0, 0, 0);
+    function getDashboardRange() {
+      const start = new Date(dashBegTime.value);
+      const end = new Date(dashEndTime.value);
+
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+        throw new Error("Please select valid begin/end times.");
       }
+      if (start > end) {
+        throw new Error("Begin time must be before end time.");
+      }
+
       return { start: start.toISOString(), end: end.toISOString() };
     }
 
@@ -1246,7 +1308,7 @@
       showError("dash-error", "");
       totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr>`;
       try {
-        const range = periodToRange(dashPeriod.value);
+        const range = getDashboardRange();
         const payload = await apiFetchAny(["/api/readings/query", "/readings/query"], {
           method: "POST",
           body: JSON.stringify({ start: range.start, end: range.end, granularity: "15min", only_active: true })
@@ -1256,7 +1318,9 @@
       } catch (e) {
         showError("dash-error", e.message || String(e));
         totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">No data</td></tr>`;
+        renderKpis([]);
         renderChart([], []);
+        renderMeterHistogram([]);
         setApiStatus(false);
       }
     }
@@ -1282,10 +1346,37 @@
       }).sort((a,b) => b.kwh - a.kwh);
 
       renderTotals(totals);
+      renderKpis(matrix);
       renderChart(labels, datasets);
+      renderMeterHistogram(totals);
     }
 
-function renderTotals(totals) {
+    function renderKpis(matrix) {
+      let totalKwh = 0;
+      let maxBucketKwh = 0;
+      let maxActiveMeters = 0;
+
+      for (const row of matrix) {
+        let rowSum = 0;
+        let rowActive = 0;
+        for (const v of row || []) {
+          const n = Number(v || 0);
+          if (!Number.isFinite(n) || n <= 0) continue;
+          rowSum += n;
+          rowActive += 1;
+        }
+        totalKwh += rowSum;
+        if (rowSum > maxBucketKwh) maxBucketKwh = rowSum;
+        if (rowActive > maxActiveMeters) maxActiveMeters = rowActive;
+      }
+
+      const maxKw = maxBucketKwh * 4;
+      kpiTotalKwh.textContent = totalKwh.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      kpiMaxKw.textContent = maxKw.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      kpiMaxActiveMeters.textContent = String(maxActiveMeters);
+    }
+
+    function renderTotals(totals) {
       totalsBody.innerHTML = "";
       if (!totals.length) {
         totalsBody.innerHTML = `<tr><td colspan="2" style="color:var(--muted);">No data</td></tr>`;
@@ -1337,6 +1428,49 @@ function renderTotals(totals) {
       });
     }
 
+    function renderMeterHistogram(totals) {
+      const ctx = document.getElementById("meterHistogramChart").getContext("2d");
+      if (meterHistogramChart) meterHistogramChart.destroy();
+
+      meterHistogramChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: totals.map(t => t.slot_code),
+          datasets: [{
+            label: "kWh",
+            data: totals.map(t => t.kwh),
+            backgroundColor: "rgba(0,208,255,.65)",
+            borderColor: "rgba(0,208,255,1)",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#E7EEF9" } },
+            tooltip: {
+              backgroundColor: "rgba(15,23,42,.98)",
+              borderColor: "rgba(31,42,68,.9)",
+              borderWidth: 1,
+              titleColor: "#E7EEF9",
+              bodyColor: "#E7EEF9"
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#93A4BD", autoSkip: true, maxTicksLimit: 24 },
+              grid: { color: "rgba(31,42,68,.35)" }
+            },
+            y: {
+              ticks: { color: "#93A4BD" },
+              grid: { color: "rgba(31,42,68,.35)" }
+            }
+          }
+        }
+      });
+    }
+
     // -------------------- Utilities --------------------
     function escapeHtml(s){
       return String(s)
@@ -1350,11 +1484,11 @@ function renderTotals(totals) {
 
     // -------------------- Boot --------------------
     (async function boot(){
-      initDashMonthOptions();
-      updateDashMonthVisibility();
+      applyPresetToInputs("last_7_days");
       try { await apiFetch("/health"); setApiStatus(true); }
       catch (_) { setApiStatus(false); }
       await loadGateways();
+      await refreshDashboard();
     })();
   </script>
 </body>
