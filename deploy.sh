@@ -3,19 +3,62 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REF="${1:-main}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LAUNCH_DIR="$(pwd)"
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Error: docker is not installed or not in PATH." >&2
-  exit 1
-fi
+require_cmd() {
+  local cmd="$1"
+  local hint="$2"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "Error: ${hint}" >&2
+    exit 1
+  fi
+}
+
+require_cmd docker "docker is not installed or not in PATH."
+require_cmd git "git is not installed or not in PATH."
 
 if ! docker compose version >/dev/null 2>&1; then
   echo "Error: docker compose plugin is not available." >&2
   exit 1
 fi
 
-if ! command -v git >/dev/null 2>&1; then
-  echo "Error: git is not installed or not in PATH." >&2
+resolve_root_dir() {
+  local -a candidates=()
+  local git_script_root git_launch_root
+
+  if [ -n "${DEPLOY_ROOT:-}" ]; then
+    candidates+=("$DEPLOY_ROOT")
+  fi
+
+  git_script_root="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+  git_launch_root="$(git -C "$LAUNCH_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+
+  candidates+=(
+    "$git_script_root"
+    "$git_launch_root"
+    "$SCRIPT_DIR"
+    "$LAUNCH_DIR"
+    "$SCRIPT_DIR/cargadoresCT79"
+    "$LAUNCH_DIR/cargadoresCT79"
+  )
+
+  local c
+  for c in "${candidates[@]}"; do
+    [ -n "$c" ] || continue
+    if [ -f "$c/docker-compose.yml" ]; then
+      cd "$c" && pwd
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+ROOT_DIR="$(resolve_root_dir || true)"
+if [ -z "$ROOT_DIR" ]; then
+  echo "Error: could not locate project root with docker-compose.yml." >&2
+  echo "Hint: DEPLOY_ROOT=/path/to/cargadoresCT79 ./deploy ${REF}" >&2
   exit 1
 fi
 
