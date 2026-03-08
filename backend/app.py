@@ -1,4 +1,3 @@
-import csv
 import glob
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -333,85 +332,11 @@ AUTO_BOOTSTRAP_CONFIG = str(os.environ.get("AUTO_BOOTSTRAP_CONFIG", "0")).strip(
 def _bootstrap_config_from_flat_file(path: str, replace: bool = False):
     if not os.path.exists(path):
         return {"loaded": 0, "reason": "file_not_found"}
-    with SessionLocal() as db:
-        existing = db.query(Meter).count()
-        if existing and existing > 0 and not replace:
-            return {"loaded": 0, "reason": "already_configured", "meters": existing}
-        if replace:
-            # wipe config tables (readings preserved)
-            db.query(Meter).delete()
-            db.query(Gateway).delete()
-            db.commit()
-
-        loaded = 0
-        with open(path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                host = (row.get("gateway_host") or "").strip()
-                port = int((row.get("gateway_port") or "0").strip() or 0)
-                unit_id = int((row.get("unit_id") or "0").strip() or 0)
-                device_uid = (row.get("deviceID") or row.get("device_uid") or row.get("meter_uid") or "").strip() or None
-
-                # Allow config-by-UID even if gateway not known yet
-                if not device_uid and (not host or port <= 0 or unit_id <= 0):
-                    continue
-
-                gw = None
-                if host and port > 0:
-                    gw = db.query(Gateway).filter(Gateway.host==host, Gateway.port==port).first()
-                    if not gw:
-                        gw = Gateway(label=f"{host}:{port}", host=host, port=port)
-                        db.add(gw)
-                        db.commit()
-                        db.refresh(gw)
-
-                m = None
-                if device_uid:
-                    m = db.query(Meter).filter((Meter.device_id==device_uid) | (Meter.device_uid==device_uid)).first()
-                if not m and gw and unit_id > 0:
-                    m = db.query(Meter).filter(Meter.gateway_id==gw.id, Meter.unit_id==unit_id).first()
-
-                if not m:
-                    m = Meter(
-                        device_id=device_uid,
-                        device_uid=device_uid,
-                        gateway_id=(gw.id if gw else None),
-                        unit_id=(unit_id if unit_id > 0 else None),
-                        slot_code=(row.get("slot_code") or "").strip() or None,
-                        description=(row.get("description") or "").strip() or None,
-                        phase=(row.get("phase") or "").strip() or None,
-                        status=(row.get("status") or "").strip() or "Activo",
-                        multiplier=float((row.get("multiplier") or "1").strip() or 1),
-                        owner_name=(row.get("owner_name") or "").strip() or None,
-                        parking_slot=(row.get("parking_slot") or "").strip() or None,
-                        is_active=0 if (str(row.get("is_active") or "1").strip().lower() in ("0","false","no","inactive")) else 1,
-                    )
-                    db.add(m)
-                    loaded += 1
-                else:
-                    # update mapping fields if provided
-                    if row.get("slot_code"):
-                        m.slot_code = (row.get("slot_code") or "").strip() or None
-                    if row.get("description"):
-                        m.description = (row.get("description") or "").strip() or None
-                    if row.get("phase"):
-                        m.phase = (row.get("phase") or "").strip() or None
-                    if row.get("status"):
-                        m.status = (row.get("status") or "").strip() or m.status
-                    if gw:
-                        m.gateway_id = gw.id
-                    if unit_id > 0:
-                        m.unit_id = unit_id
-                    if row.get("owner_name"):
-                        m.owner_name = (row.get("owner_name") or "").strip() or None
-                    if row.get("parking_slot"):
-                        m.parking_slot = (row.get("parking_slot") or "").strip() or None
-                    if row.get("is_active"):
-                        m.is_active = 0 if (str(row.get("is_active") or "").strip().lower() in ("0","false","no","inactive")) else 1
-                    db.add(m)
-
-        db.commit()
-        return {"loaded": loaded, "reason": "ok"}
+    return {
+        "loaded": 0,
+        "reason": "disabled",
+        "message": "Automated meter imports are disabled. Manage meters manually.",
+    }
 @app.on_event("startup")
 def _startup_bootstrap_config():
     if not AUTO_BOOTSTRAP_CONFIG:
@@ -442,8 +367,6 @@ def _ensure_ingest_tables():
             conn.execute(text("ALTER TABLE meters ADD COLUMN \"deviceID\" TEXT"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_meters_deviceID ON meters(\"deviceID\")"))
         conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_meters_device_uid ON meters(device_uid)"))
-        conn.execute(text("UPDATE meters SET \"deviceID\" = device_uid WHERE \"deviceID\" IS NULL AND device_uid IS NOT NULL"))
-        conn.execute(text("UPDATE meters SET device_uid = \"deviceID\" WHERE device_uid IS NULL AND \"deviceID\" IS NOT NULL"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS exec_logs (
@@ -475,34 +398,11 @@ def _get_meter_id(db, gateway_id: int, unit_id: int):
     return m.id if m else None
 
 
-def _get_or_create_meter_by_uid(db, device_uid: str, gw_id: int | None = None, unit_id: int | None = None):
+def _get_meter_by_uid(db, device_uid: str):
     device_uid = (device_uid or "").strip()
     if not device_uid:
         return None
     m = db.query(Meter).filter((Meter.device_id==device_uid) | (Meter.device_uid==device_uid)).first()
-    if not m:
-        m = Meter(
-            device_id=device_uid,
-            device_uid=device_uid,
-            gateway_id=gw_id,
-            unit_id=unit_id,
-            status="Activo",
-            multiplier=1.0,
-        )
-        db.add(m)
-        db.flush()
-    else:
-        # Keep last-seen location (optional)
-        changed = False
-        if gw_id is not None and m.gateway_id != gw_id:
-            m.gateway_id = gw_id
-            changed = True
-        if unit_id is not None and m.unit_id != unit_id:
-            m.unit_id = unit_id
-            changed = True
-        if changed:
-            db.add(m)
-            db.flush()
     return m
 
 
@@ -543,7 +443,7 @@ async def ingest_run(payload: dict):
 
                     meter_id = None
                     if device_uid:
-                        m = _get_or_create_meter_by_uid(db, str(device_uid), gw_row.id, unit_i)
+                        m = _get_meter_by_uid(db, str(device_uid))
                         meter_id = m.id if m else None
                     else:
                         # legacy fallback
