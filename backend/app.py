@@ -13,7 +13,7 @@ import os, json
 from collections import defaultdict
 from html import escape
 
-from .db import SessionLocal, init_db, engine, Gateway, Meter, Reading
+from .db import SessionLocal, init_db, engine, Gateway, Meter, Reading, InvoicePricing
 
 STATIC_DIR = "frontend"
 INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
@@ -185,7 +185,44 @@ def _month_bounds_utc(year: int, month: int):
     return start_utc, end_utc
 
 
-def _build_monthly_invoice(db, meter: Meter, year: int, month: int):
+class InvoicePricingBody(BaseModel):
+    p1_price: float = 0.0
+    p2_price: float = 0.0
+    p3_price: float = 0.0
+    p4_price: float = 0.0
+    p5_price: float = 0.0
+    p6_price: float = 0.0
+    capacity_fee: float = 0.0
+    admin_fee: float = 0.0
+
+
+def _read_saved_pricing(db, year: int, month: int) -> dict:
+    row = db.execute(select(InvoicePricing).where(and_(InvoicePricing.year == year, InvoicePricing.month == month))).scalars().first()
+    if not row:
+        return {
+            "p1_price": 0.0, "p2_price": 0.0, "p3_price": 0.0,
+            "p4_price": 0.0, "p5_price": 0.0, "p6_price": 0.0,
+            "capacity_fee": 0.0, "admin_fee": 0.0,
+        }
+    return {
+        "p1_price": float(row.p1_price or 0.0), "p2_price": float(row.p2_price or 0.0), "p3_price": float(row.p3_price or 0.0),
+        "p4_price": float(row.p4_price or 0.0), "p5_price": float(row.p5_price or 0.0), "p6_price": float(row.p6_price or 0.0),
+        "capacity_fee": float(row.capacity_fee or 0.0), "admin_fee": float(row.admin_fee or 0.0),
+    }
+
+
+def _merge_pricing(saved: dict, override: Optional[dict]) -> dict:
+    out = dict(saved)
+    if not override:
+        return out
+    for k, v in override.items():
+        if v is None:
+            continue
+        out[k] = float(v)
+    return out
+
+
+def _build_monthly_invoice(db, meter: Meter, year: int, month: int, pricing: Optional[dict] = None):
     if month < 1 or month > 12:
         raise HTTPException(status_code=400, detail="month must be between 1 and 12")
 
@@ -199,16 +236,16 @@ def _build_monthly_invoice(db, meter: Meter, year: int, month: int):
         .order_by(Reading.ts_utc.desc())
         .limit(1)
     ).scalars().first()
-    current_end = db.execute(
-        select(Reading)
-        .where(and_(Reading.meter_id == meter.id, Reading.ts_utc < end_utc, Reading.kwh_import != None))
-        .order_by(Reading.ts_utc.desc())
-        .limit(1)
-    ).scalars().first()
 
-    rows = db.execute(
+    month_kwh_rows = db.execute(
         select(Reading)
-        .where(and_(Reading.meter_id == meter.id, Reading.ts_utc >= start_utc - timedelta(days=1), Reading.ts_utc < end_utc))
+        .where(and_(Reading.meter_id == meter.id, Reading.ts_utc >= start_utc, Reading.ts_utc < end_utc, Reading.kwh_import != None))
+        .order_by(Reading.ts_utc)
+    ).scalars().all()
+
+    month_all_rows = db.execute(
+        select(Reading)
+        .where(and_(Reading.meter_id == meter.id, Reading.ts_utc >= start_utc, Reading.ts_utc < end_utc))
         .order_by(Reading.ts_utc)
     ).scalars().all()
 
@@ -217,25 +254,52 @@ def _build_monthly_invoice(db, meter: Meter, year: int, month: int):
     max_power_by_period = {p: 0.0 for p in periods}
     daily = defaultdict(lambda: {p: 0.0 for p in periods})
 
-    prev_kwh = previous_end.kwh_import if previous_end else None
-    for r in rows:
+    # Max power by period from all month readings with power values.
+    for r in month_all_rows:
+        if r.power_kw is None:
+            continue
         ts_local = r.ts_utc.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz_madrid)
-        if not (start_utc <= r.ts_utc < end_utc):
+        period = _tariff_period_for_spain(ts_local)
+        max_power_by_period[period] = max(max_power_by_period[period], float(r.power_kw) * multiplier)
+
+    first_month_reading = month_kwh_rows[0] if month_kwh_rows else None
+    current_end = month_kwh_rows[-1] if month_kwh_rows else None
+
+    baseline = previous_end if previous_end is not None else first_month_reading
+    baseline_from_previous_month = previous_end is not None
+
+    prev_kwh = float(baseline.kwh_import) if baseline and baseline.kwh_import is not None else None
+    baseline_ts_utc = baseline.ts_utc if baseline else None
+
+    for r in month_kwh_rows:
+        # If baseline is first reading of month, do not allocate a zero-span delta to it.
+        if baseline_ts_utc is not None and (not baseline_from_previous_month) and r.ts_utc == baseline_ts_utc:
+            continue
+        if prev_kwh is None or r.kwh_import is None:
             if r.kwh_import is not None:
-                prev_kwh = r.kwh_import
+                prev_kwh = float(r.kwh_import)
             continue
 
-        period = _tariff_period_for_spain(ts_local)
-        if r.power_kw is not None:
-            max_power_by_period[period] = max(max_power_by_period[period], float(r.power_kw) * multiplier)
+        curr = float(r.kwh_import)
+        delta_raw = curr - prev_kwh
+        prev_kwh = curr
+        if delta_raw < 0:
+            continue
 
-        if r.kwh_import is not None and prev_kwh is not None and float(r.kwh_import) >= float(prev_kwh):
-            delta = (float(r.kwh_import) - float(prev_kwh)) * multiplier
-            energy_by_period[period] += delta
-            day_key = ts_local.strftime("%Y-%m-%d")
-            daily[day_key][period] += delta
-        if r.kwh_import is not None:
-            prev_kwh = r.kwh_import
+        delta = delta_raw * multiplier
+        ts_local = r.ts_utc.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz_madrid)
+        period = _tariff_period_for_spain(ts_local)
+        day_key = ts_local.strftime("%Y-%m-%d")
+        energy_by_period[period] += delta
+        daily[day_key][period] += delta
+
+    total_from_periods = sum(energy_by_period.values())
+
+    if baseline and current_end and baseline.kwh_import is not None and current_end.kwh_import is not None:
+        span_delta = (float(current_end.kwh_import) - float(baseline.kwh_import)) * multiplier
+        total_from_span = max(span_delta, 0.0)
+    else:
+        total_from_span = 0.0
 
     days = []
     _, last_day = monthrange(year, month)
@@ -244,6 +308,22 @@ def _build_monthly_invoice(db, meter: Meter, year: int, month: int):
         entry = {"date": day_key, "periods": {p: round(daily[day_key].get(p, 0.0), 3) for p in periods}}
         entry["total_kwh"] = round(sum(entry["periods"].values()), 3)
         days.append(entry)
+
+    pricing = pricing or {}
+    price_per_period = {
+        "P1": float(pricing.get("p1_price", 0.0) or 0.0),
+        "P2": float(pricing.get("p2_price", 0.0) or 0.0),
+        "P3": float(pricing.get("p3_price", 0.0) or 0.0),
+        "P4": float(pricing.get("p4_price", 0.0) or 0.0),
+        "P5": float(pricing.get("p5_price", 0.0) or 0.0),
+        "P6": float(pricing.get("p6_price", 0.0) or 0.0),
+    }
+    capacity_fee = float(pricing.get("capacity_fee", 0.0) or 0.0)
+    admin_fee = float(pricing.get("admin_fee", 0.0) or 0.0)
+
+    energy_cost_by_period = {p: round(energy_by_period[p] * price_per_period[p], 2) for p in periods}
+    energy_cost_total = round(sum(energy_cost_by_period.values()), 2)
+    invoice_total = round(energy_cost_total + capacity_fee + admin_fee, 2)
 
     return {
         "meter": {
@@ -259,23 +339,81 @@ def _build_monthly_invoice(db, meter: Meter, year: int, month: int):
         "timezone": "Europe/Madrid",
         "periods": periods,
         "previous_month_end_reading_kwh": round(float(previous_end.kwh_import), 3) if previous_end and previous_end.kwh_import is not None else None,
+        "month_start_baseline_reading_kwh": round(float(baseline.kwh_import), 3) if baseline and baseline.kwh_import is not None else None,
         "current_month_end_reading_kwh": round(float(current_end.kwh_import), 3) if current_end and current_end.kwh_import is not None else None,
         "energy_by_period_kwh": {p: round(energy_by_period[p], 3) for p in periods},
         "max_power_by_period_kw": {p: round(max_power_by_period[p], 3) for p in periods},
-        "total_energy_kwh": round(sum(energy_by_period.values()), 3),
+        "total_energy_kwh": round(total_from_span, 3),
+        "total_energy_from_periods_kwh": round(total_from_periods, 3),
+        "validation_gap_kwh": round(total_from_span - total_from_periods, 6),
         "daily_breakdown": days,
+        "pricing": {
+            "price_per_kwh": {p: round(price_per_period[p], 6) for p in periods},
+            "capacity_fee": round(capacity_fee, 2),
+            "admin_fee": round(admin_fee, 2),
+            "energy_cost_by_period": energy_cost_by_period,
+            "energy_cost_total": energy_cost_total,
+            "invoice_total": invoice_total,
+        },
     }
 
 
+@app.get("/api/invoices/pricing")
+def get_invoice_pricing(year: int, month: int):
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="month must be between 1 and 12")
+    with SessionLocal() as db:
+        return {"year": year, "month": month, **_read_saved_pricing(db, year, month)}
+
+
+@app.put("/api/invoices/pricing")
+def save_invoice_pricing(year: int, month: int, body: InvoicePricingBody):
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="month must be between 1 and 12")
+    with SessionLocal() as db:
+        row = db.execute(select(InvoicePricing).where(and_(InvoicePricing.year == year, InvoicePricing.month == month))).scalars().first()
+        if not row:
+            row = InvoicePricing(year=year, month=month)
+            db.add(row)
+        row.p1_price = float(body.p1_price)
+        row.p2_price = float(body.p2_price)
+        row.p3_price = float(body.p3_price)
+        row.p4_price = float(body.p4_price)
+        row.p5_price = float(body.p5_price)
+        row.p6_price = float(body.p6_price)
+        row.capacity_fee = float(body.capacity_fee)
+        row.admin_fee = float(body.admin_fee)
+        db.commit()
+        return {"ok": True, "year": year, "month": month}
+
+
 @app.get("/api/invoices/monthly/{meter_id}")
-def monthly_invoice_data(meter_id: int, year: int, month: int):
+def monthly_invoice_data(
+    meter_id: int,
+    year: int,
+    month: int,
+    p1_price: Optional[float] = None,
+    p2_price: Optional[float] = None,
+    p3_price: Optional[float] = None,
+    p4_price: Optional[float] = None,
+    p5_price: Optional[float] = None,
+    p6_price: Optional[float] = None,
+    capacity_fee: Optional[float] = None,
+    admin_fee: Optional[float] = None,
+):
     with SessionLocal() as db:
         meter = db.get(Meter, meter_id)
         if not meter:
             raise HTTPException(status_code=404, detail="Meter not found")
         if not bool(meter.is_active):
             raise HTTPException(status_code=400, detail="Meter is inactive")
-        return _build_monthly_invoice(db, meter, year, month)
+        saved = _read_saved_pricing(db, year, month)
+        pricing = _merge_pricing(saved, {
+            "p1_price": p1_price, "p2_price": p2_price, "p3_price": p3_price,
+            "p4_price": p4_price, "p5_price": p5_price, "p6_price": p6_price,
+            "capacity_fee": capacity_fee, "admin_fee": admin_fee,
+        })
+        return _build_monthly_invoice(db, meter, year, month, pricing=pricing)
 
 
 def _invoice_html_fragment(invoice: dict) -> str:
@@ -307,10 +445,19 @@ def _invoice_html_fragment(invoice: dict) -> str:
 <h1>Monthly invoice — {escape(meter_label)}</h1>
 <div class='muted'>Owner: {escape(invoice['meter']['owner_name'] or '-')} · Parking: {escape(invoice['meter']['parking_slot'] or '-')} · Month: {invoice['year']}-{invoice['month']:02d} ({invoice['timezone']})</div>
 <p><b>Reading previous month end:</b> {invoice['previous_month_end_reading_kwh']} kWh<br>
+<b>Baseline reading used:</b> {invoice['month_start_baseline_reading_kwh']} kWh<br>
 <b>Reading invoiced month end:</b> {invoice['current_month_end_reading_kwh']} kWh<br>
-<b>Total energy:</b> {invoice['total_energy_kwh']:.3f} kWh</p>
+<b>Total energy (baseline→end):</b> {invoice['total_energy_kwh']:.3f} kWh<br>
+<b>Total energy (sum of periods):</b> {invoice['total_energy_from_periods_kwh']:.3f} kWh</p>
 <h3>Delivery periods summary</h3>
 <table><thead><tr><th>Period</th><th>Energy (kWh)</th><th>Max power (kW)</th></tr></thead><tbody>{period_rows}</tbody></table>
+<h3>Charges summary</h3>
+<table><thead><tr><th>Concept</th><th>Amount (€)</th></tr></thead><tbody>
+<tr><td>Energy cost</td><td>{invoice["pricing"]["energy_cost_total"]:.2f}</td></tr>
+<tr><td>Capacity fee</td><td>{invoice["pricing"]["capacity_fee"]:.2f}</td></tr>
+<tr><td>Admin fee</td><td>{invoice["pricing"]["admin_fee"]:.2f}</td></tr>
+<tr><td><b>Total invoice</b></td><td><b>{invoice["pricing"]["invoice_total"]:.2f}</b></td></tr>
+</tbody></table>
 <h3>Appendix A — Daily table by period</h3>
 <table><thead><tr><th>Date</th>{''.join(f'<th>{p}</th>' for p in periods)}<th>Total</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
 <h3>Appendix B — Daily stacked graph</h3>
@@ -353,22 +500,57 @@ def list_active_meters_for_invoicing():
 
 
 @app.get("/api/invoices/monthly/{meter_id}/print", response_class=HTMLResponse)
-def monthly_invoice_printable(meter_id: int, year: int, month: int):
+def monthly_invoice_printable(
+    meter_id: int,
+    year: int,
+    month: int,
+    p1_price: Optional[float] = None,
+    p2_price: Optional[float] = None,
+    p3_price: Optional[float] = None,
+    p4_price: Optional[float] = None,
+    p5_price: Optional[float] = None,
+    p6_price: Optional[float] = None,
+    capacity_fee: Optional[float] = None,
+    admin_fee: Optional[float] = None,
+):
     with SessionLocal() as db:
         meter = db.get(Meter, meter_id)
         if not meter:
             raise HTTPException(status_code=404, detail="Meter not found")
         if not bool(meter.is_active):
             raise HTTPException(status_code=400, detail="Meter is inactive")
-        invoice = _build_monthly_invoice(db, meter, year, month)
+        saved = _read_saved_pricing(db, year, month)
+        pricing = _merge_pricing(saved, {
+            "p1_price": p1_price, "p2_price": p2_price, "p3_price": p3_price,
+            "p4_price": p4_price, "p5_price": p5_price, "p6_price": p6_price,
+            "capacity_fee": capacity_fee, "admin_fee": admin_fee,
+        })
+        invoice = _build_monthly_invoice(db, meter, year, month, pricing=pricing)
     return _render_invoice_html(invoice, show_print_button=True)
 
 
 @app.get("/api/invoices/all/monthly/print", response_class=HTMLResponse)
-def monthly_invoice_printable_all(year: int, month: int):
+def monthly_invoice_printable_all(
+    year: int,
+    month: int,
+    p1_price: Optional[float] = None,
+    p2_price: Optional[float] = None,
+    p3_price: Optional[float] = None,
+    p4_price: Optional[float] = None,
+    p5_price: Optional[float] = None,
+    p6_price: Optional[float] = None,
+    capacity_fee: Optional[float] = None,
+    admin_fee: Optional[float] = None,
+):
     with SessionLocal() as db:
         meters = db.execute(select(Meter).where(Meter.is_active == 1).order_by(Meter.slot_code, Meter.id)).scalars().all()
-        invoices = [_build_monthly_invoice(db, meter, year, month) for meter in meters]
+        saved = _read_saved_pricing(db, year, month)
+        pricing = _merge_pricing(saved, {
+            "p1_price": p1_price, "p2_price": p2_price, "p3_price": p3_price,
+            "p4_price": p4_price, "p5_price": p5_price, "p6_price": p6_price,
+            "capacity_fee": capacity_fee, "admin_fee": admin_fee,
+        })
+        invoices = [_build_monthly_invoice(db, meter, year, month, pricing=pricing) for meter in meters]
 
     sections = []
     for inv in invoices:
@@ -664,6 +846,22 @@ def _ensure_ingest_tables():
             log_text TEXT
         )
         """))
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS invoice_pricing (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            p1_price REAL DEFAULT 0,
+            p2_price REAL DEFAULT 0,
+            p3_price REAL DEFAULT 0,
+            p4_price REAL DEFAULT 0,
+            p5_price REAL DEFAULT 0,
+            p6_price REAL DEFAULT 0,
+            capacity_fee REAL DEFAULT 0,
+            admin_fee REAL DEFAULT 0
+        )
+        """))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_invoice_pricing_year_month ON invoice_pricing(year, month)"))
 
 def _get_or_create_gateway(db, host: str, port: int):
     gw = db.query(Gateway).filter(Gateway.host==host, Gateway.port==port).first()
