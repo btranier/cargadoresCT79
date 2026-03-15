@@ -254,6 +254,7 @@
         <button class="tab" data-tab="config">Config</button>
         <button class="tab" data-tab="logs">Logs</button>
         <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="invoicing">Invoicing</button>
         <button class="tab" data-tab="readings">Readings</button>
       </div>
       <div class="row">
@@ -484,6 +485,39 @@
       </div>
     </div>
 
+    <!-- INVOICING -->
+    <div id="view-invoicing" class="view" style="display:none;">
+      <div class="grid grid-12">
+        <div class="card col-12">
+          <div class="card-h">
+            <div class="card-title">Invoicing</div>
+            <div class="row">
+              <select id="inv-meter" style="min-width:280px;"></select>
+              <input id="inv-month" type="month" style="min-width:170px;" />
+              <input id="inv-p1" type="number" step="0.0001" placeholder="P1 €/kWh" style="min-width:110px;" />
+              <input id="inv-p2" type="number" step="0.0001" placeholder="P2 €/kWh" style="min-width:110px;" />
+              <input id="inv-p3" type="number" step="0.0001" placeholder="P3 €/kWh" style="min-width:110px;" />
+              <input id="inv-p4" type="number" step="0.0001" placeholder="P4 €/kWh" style="min-width:110px;" />
+              <input id="inv-p5" type="number" step="0.0001" placeholder="P5 €/kWh" style="min-width:110px;" />
+              <input id="inv-p6" type="number" step="0.0001" placeholder="P6 €/kWh" style="min-width:110px;" />
+              <input id="inv-capacity" type="number" step="0.01" placeholder="Capacity €" style="min-width:110px;" />
+              <input id="inv-admin" type="number" step="0.01" placeholder="Admin €" style="min-width:110px;" />
+              <button class="btn" id="btn-load-invoice">Load printable view</button>
+              <button class="btn" id="btn-save-pricing">Save month pricing</button>
+              <button class="btn primary" id="btn-all-invoices">Generate PDF for all meters</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div class="muted" style="margin-bottom:8px;">Pick an active meter and month. The preview is the printable version. Use browser print dialog to save as PDF locally.</div>
+            <div id="invoicing-error" class="err" style="display:none;"></div>
+            <div class="scroll" style="max-height:none; height:820px;">
+              <iframe id="inv-preview" title="Invoice preview" style="width:100%; height:780px; border:0; background:#fff;"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- READINGS -->
     <div id="view-readings" class="view" style="display:none;">
       <div class="grid grid-12">
@@ -629,6 +663,7 @@
       config: document.getElementById("view-config"),
       logs: document.getElementById("view-logs"),
       dashboard: document.getElementById("view-dashboard"),
+      invoicing: document.getElementById("view-invoicing"),
       readings: document.getElementById("view-readings"),
     };
 
@@ -640,6 +675,7 @@
         Object.entries(views).forEach(([k, v]) => v.style.display = (k === key ? "block" : "none"));
         if (key === "logs") { loadLogFiles(); loadExecLogs(); }
         if (key === "dashboard") refreshDashboard();
+        if (key === "invoicing") loadInvoicingScreen();
         if (key === "readings") loadLatestReadings();
       });
     });
@@ -1092,6 +1128,132 @@
       dashBegTime.value = toDatetimeLocalValue(start);
       dashEndTime.value = toDatetimeLocalValue(end);
     }
+
+    // -------------------- Invoicing --------------------
+    const invMeter = document.getElementById("inv-meter");
+    const invMonth = document.getElementById("inv-month");
+    const btnLoadInvoice = document.getElementById("btn-load-invoice");
+    const btnAllInvoices = document.getElementById("btn-all-invoices");
+    const btnSavePricing = document.getElementById("btn-save-pricing");
+    const invPreview = document.getElementById("inv-preview");
+    const invP1 = document.getElementById("inv-p1");
+    const invP2 = document.getElementById("inv-p2");
+    const invP3 = document.getElementById("inv-p3");
+    const invP4 = document.getElementById("inv-p4");
+    const invP5 = document.getElementById("inv-p5");
+    const invP6 = document.getElementById("inv-p6");
+    const invCapacity = document.getElementById("inv-capacity");
+    const invAdmin = document.getElementById("inv-admin");
+
+    async function loadInvoicingScreen() {
+      showError("invoicing-error", "");
+      try {
+        if (!invMonth.value) invMonth.value = new Date().toISOString().slice(0,7);
+        await loadSavedPricingForMonth();
+        const meters = await apiFetch('/api/invoices/active_meters');
+        invMeter.innerHTML = '';
+        for (const m of (meters || [])) {
+          const label = `${m.slot_code || ('Meter ' + m.id)} · ${m.owner_name || '-'} · ${m.parking_slot || '-'}`;
+          const opt = document.createElement('option');
+          opt.value = String(m.id);
+          opt.textContent = label;
+          invMeter.appendChild(opt);
+        }
+        if (invMeter.value) {
+          updateInvoicePreview();
+        } else {
+          invPreview.srcdoc = '<p style="font-family:Arial;padding:16px;">No active meters available.</p>';
+        }
+      } catch (e) {
+        showError("invoicing-error", e.message || String(e));
+      }
+    }
+
+
+
+    async function loadSavedPricingForMonth() {
+      const raw = (invMonth.value || '').trim();
+      if (!/^\d{4}-\d{2}$/.test(raw)) return;
+      const [year, month] = raw.split('-');
+      const pricing = await apiFetch(`/api/invoices/pricing?year=${Number(year)}&month=${Number(month)}`);
+      invP1.value = pricing?.p1_price ?? 0;
+      invP2.value = pricing?.p2_price ?? 0;
+      invP3.value = pricing?.p3_price ?? 0;
+      invP4.value = pricing?.p4_price ?? 0;
+      invP5.value = pricing?.p5_price ?? 0;
+      invP6.value = pricing?.p6_price ?? 0;
+      invCapacity.value = pricing?.capacity_fee ?? 0;
+      invAdmin.value = pricing?.admin_fee ?? 0;
+    }
+
+    async function savePricingForMonth() {
+      const raw = (invMonth.value || '').trim();
+      if (!/^\d{4}-\d{2}$/.test(raw)) {
+        alert('Please select a valid month.');
+        return;
+      }
+      const [year, month] = raw.split('-');
+      await apiFetch(`/api/invoices/pricing?year=${Number(year)}&month=${Number(month)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          p1_price: Number(invP1.value || 0),
+          p2_price: Number(invP2.value || 0),
+          p3_price: Number(invP3.value || 0),
+          p4_price: Number(invP4.value || 0),
+          p5_price: Number(invP5.value || 0),
+          p6_price: Number(invP6.value || 0),
+          capacity_fee: Number(invCapacity.value || 0),
+          admin_fee: Number(invAdmin.value || 0),
+        })
+      });
+      updateInvoicePreview();
+      alert('Pricing saved for selected month.');
+    }
+
+    function invoicePricingQuery() {
+      const qp = new URLSearchParams();
+      const put = (k, v) => {
+        const x = Number((v || '').toString().trim());
+        if (Number.isFinite(x)) qp.set(k, String(x));
+      };
+      put('p1_price', invP1.value); put('p2_price', invP2.value); put('p3_price', invP3.value);
+      put('p4_price', invP4.value); put('p5_price', invP5.value); put('p6_price', invP6.value);
+      put('capacity_fee', invCapacity.value); put('admin_fee', invAdmin.value);
+      return qp;
+    }
+
+    function updateInvoicePreview() {
+      const meterId = Number(invMeter.value || 0);
+      const raw = (invMonth.value || '').trim();
+      if (!meterId || !/^\d{4}-\d{2}$/.test(raw)) {
+        return;
+      }
+      const [year, month] = raw.split('-');
+      const qp = invoicePricingQuery();
+      qp.set('year', String(Number(year)));
+      qp.set('month', String(Number(month)));
+      const url = `/api/invoices/monthly/${meterId}/print?${qp.toString()}`;
+      invPreview.src = url;
+    }
+
+    btnLoadInvoice?.addEventListener('click', updateInvoicePreview);
+    invMeter?.addEventListener('change', updateInvoicePreview);
+    invMonth?.addEventListener('change', async () => { await loadSavedPricingForMonth(); updateInvoicePreview(); });
+    btnSavePricing?.addEventListener('click', savePricingForMonth);
+
+    btnAllInvoices?.addEventListener('click', () => {
+      const raw = (invMonth.value || '').trim();
+      if (!/^\d{4}-\d{2}$/.test(raw)) {
+        alert('Please select a valid month.');
+        return;
+      }
+      const [year, month] = raw.split('-');
+      const qp = invoicePricingQuery();
+      qp.set('year', String(Number(year)));
+      qp.set('month', String(Number(month)));
+      const url = `/api/invoices/all/monthly/print?${qp.toString()}`;
+      window.open(url, '_blank', 'noopener');
+    });
 
     // -------------------- Readings (Latest 500) --------------------
     const readingsBody = document.getElementById("readings-body");

@@ -46,6 +46,22 @@ class Meter(Base):
     parking_slot = Column(String, nullable=True)
     is_active = Column(Integer, nullable=False, default=1)
 
+
+class InvoicePricing(Base):
+    __tablename__ = "invoice_pricing"
+    id = Column(Integer, primary_key=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    p1_price = Column(Float, nullable=False, default=0.0)
+    p2_price = Column(Float, nullable=False, default=0.0)
+    p3_price = Column(Float, nullable=False, default=0.0)
+    p4_price = Column(Float, nullable=False, default=0.0)
+    p5_price = Column(Float, nullable=False, default=0.0)
+    p6_price = Column(Float, nullable=False, default=0.0)
+    capacity_fee = Column(Float, nullable=False, default=0.0)
+    admin_fee = Column(Float, nullable=False, default=0.0)
+    __table_args__ = (UniqueConstraint("year", "month", name="uix_invoice_pricing_year_month"),)
+
 class Reading(Base):
     __tablename__ = "readings"
     id = Column(Integer, primary_key=True)
