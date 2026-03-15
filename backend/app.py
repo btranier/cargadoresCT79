@@ -448,6 +448,11 @@ def dashboard_analytics(body: DashboardQueryBody):
         if r.gateway_id is None or r.unit_id is None:
             continue
 
+        pwr = float(r.power_kw) if r.power_kw is not None else None
+        # Dashboard-wide performance/quality filter: ignore low-load readings.
+        if pwr is None or pwr < 0.5:
+            continue
+
         key = (int(r.gateway_id), int(r.unit_id))
         meter = meter_map.get(key)
 
@@ -456,12 +461,9 @@ def dashboard_analytics(body: DashboardQueryBody):
                 unmapped[key] += 1
             continue
 
-        if r.power_kw is not None:
-            p = float(r.power_kw)
-            bucket_15 = b15(r.ts_utc)
-            kw_per_15[bucket_15] += p
-            if p > 0.5:
-                active_meters_per_15[bucket_15].add(key)
+        bucket_15 = b15(r.ts_utc)
+        kw_per_15[bucket_15] += pwr
+        active_meters_per_15[bucket_15].add(key)
 
         if r.kwh_import is None:
             continue
