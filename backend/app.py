@@ -108,9 +108,52 @@ class DashboardQueryBody(BaseModel):
     end: str
 
 
+def _easter_sunday(year: int):
+    # Meeus/Jones/Butcher Gregorian algorithm.
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    from datetime import date
+    return date(year, month, day)
+
+
+def _is_30td_national_holiday(local_ts: datetime) -> bool:
+    from datetime import date, timedelta
+
+    y = local_ts.year
+    d = local_ts.date()
+    easter = _easter_sunday(y)
+    good_friday = easter - timedelta(days=2)
+
+    national = {
+        date(y, 1, 1),   # Año nuevo
+        date(y, 1, 6),   # Epifanía
+        good_friday,     # Viernes Santo
+        date(y, 5, 1),   # Día del trabajador
+        date(y, 8, 15),  # Asunción
+        date(y, 10, 12), # Fiesta nacional
+        date(y, 11, 1),  # Todos los Santos
+        date(y, 12, 6),  # Constitución
+        date(y, 12, 8),  # Inmaculada
+        date(y, 12, 25), # Navidad
+    }
+    return d in national
+
+
 def _tariff_period_for_spain(local_ts: datetime) -> str:
-    # Saturdays/Sundays are always valley period (P6).
-    if local_ts.weekday() >= 5:
+    # 3.0TD: Saturdays, Sundays and non-substitutable national holidays => P6 all day.
+    if local_ts.weekday() >= 5 or _is_30td_national_holiday(local_ts):
         return "P6"
 
     seasonal_by_hour = {
