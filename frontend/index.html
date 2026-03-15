@@ -525,6 +525,7 @@
           <div class="card-h">
             <div class="card-title">Latest readings (500)</div>
             <div class="row">
+              <input id="invoice-month" type="month" title="Invoice month" style="min-width:170px;" />
               <button class="btn" id="btn-refresh-readings">Refresh</button>
             </div>
           </div>
@@ -548,6 +549,7 @@
                     <th>current_a</th>
                     <th>freq_hz</th>
                     <th>pf</th>
+                    <th>invoice</th>
                   </tr>
                 </thead>
                 <tbody id="readings-body"></tbody>
@@ -1258,17 +1260,18 @@
     // -------------------- Readings (Latest 500) --------------------
     const readingsBody = document.getElementById("readings-body");
     const btnRefreshReadings = document.getElementById("btn-refresh-readings");
+    const invoiceMonthInput = document.getElementById("invoice-month");
 
     async function loadLatestReadings() {
       showError("readings-error", "");
-      readingsBody.innerHTML = `<tr><td colspan="14" style="color:var(--muted);">Loading...</td></tr>`;
+      readingsBody.innerHTML = `<tr><td colspan="15" style="color:var(--muted);">Loading...</td></tr>`;
       try {
         const rows = await apiFetchAny(["/api/readings/latest?limit=500", "/readings/latest?limit=500"]);
         renderReadings(rows || []);
         setApiStatus(true);
       } catch (e) {
         showError("readings-error", e.message || String(e));
-        readingsBody.innerHTML = `<tr><td colspan="14" style="color:var(--muted);">No data</td></tr>`;
+        readingsBody.innerHTML = `<tr><td colspan="15" style="color:var(--muted);">No data</td></tr>`;
         setApiStatus(false);
       }
     }
@@ -1276,10 +1279,13 @@
     function renderReadings(rows) {
       readingsBody.innerHTML = "";
       if (!rows.length) {
-        readingsBody.innerHTML = `<tr><td colspan="14" style="color:var(--muted);">No rows</td></tr>`;
+        readingsBody.innerHTML = `<tr><td colspan="15" style="color:var(--muted);">No rows</td></tr>`;
         return;
       }
       for (const r of rows) {
+        const invoiceBtn = (r.meter_id && (r.is_active === true || r.is_active === 1 || r.is_active === null))
+          ? `<button class="btn" onclick="openInvoice(${Number(r.meter_id)})">Invoice PDF</button>`
+          : `<span class="muted">-</span>`;
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td class="mono">${escapeHtml(r.ts_utc || "")}</td>
@@ -1296,10 +1302,23 @@
           <td class="mono">${fmtNum(r.current_a)}</td>
           <td class="mono">${fmtNum(r.freq_hz)}</td>
           <td class="mono">${fmtNum(r.pf)}</td>
+          <td>${invoiceBtn}</td>
         `;
         readingsBody.appendChild(tr);
       }
     }
+
+    function openInvoice(meterId) {
+      const raw = (invoiceMonthInput?.value || "").trim();
+      if (!/^\d{4}-\d{2}$/.test(raw)) {
+        alert("Please select a valid invoice month.");
+        return;
+      }
+      const [year, month] = raw.split("-");
+      const url = `/api/invoices/monthly/${meterId}/print?year=${Number(year)}&month=${Number(month)}`;
+      window.open(url, "_blank", "noopener");
+    }
+    window.openInvoice = openInvoice;
 
     function fmtNum(v) {
       if (v === null || v === undefined || v === "") return "";
@@ -1511,6 +1530,7 @@
     // -------------------- Boot --------------------
     (async function boot(){
       applyPresetToInputs("last_7_days");
+      invoiceMonthInput.value = new Date().toISOString().slice(0,7);
       try { await apiFetch("/health"); setApiStatus(true); }
       catch (_) { setApiStatus(false); }
       await loadGateways();
