@@ -278,16 +278,7 @@ def monthly_invoice_data(meter_id: int, year: int, month: int):
         return _build_monthly_invoice(db, meter, year, month)
 
 
-@app.get("/api/invoices/monthly/{meter_id}/print", response_class=HTMLResponse)
-def monthly_invoice_printable(meter_id: int, year: int, month: int):
-    with SessionLocal() as db:
-        meter = db.get(Meter, meter_id)
-        if not meter:
-            raise HTTPException(status_code=404, detail="Meter not found")
-        if not bool(meter.is_active):
-            raise HTTPException(status_code=400, detail="Meter is inactive")
-        invoice = _build_monthly_invoice(db, meter, year, month)
-
+def _invoice_html_fragment(invoice: dict) -> str:
     periods = invoice["periods"]
     max_daily = max((row["total_kwh"] for row in invoice["daily_breakdown"]), default=0.0)
     bars = []
@@ -312,12 +303,7 @@ def monthly_invoice_printable(meter_id: int, year: int, month: int):
     )
     meter_label = invoice["meter"]["slot_code"] or f"Meter {invoice['meter']['id']}"
     return f"""
-<!doctype html><html><head><meta charset='utf-8'><title>Invoice {escape(meter_label)}</title>
-<style>
-body{{font-family:Arial,sans-serif;margin:24px;color:#111}} h1{{margin:0 0 6px}} table{{border-collapse:collapse;width:100%;margin-top:10px}} th,td{{border:1px solid #ccc;padding:6px;font-size:12px;text-align:right}} th:first-child,td:first-child{{text-align:left}}
-.muted{{color:#666;font-size:12px}} @media print{{.no-print{{display:none}}}}
-</style></head><body>
-<button class='no-print' onclick='window.print()'>Print / Save PDF</button>
+<section class='invoice'>
 <h1>Monthly invoice — {escape(meter_label)}</h1>
 <div class='muted'>Owner: {escape(invoice['meter']['owner_name'] or '-')} · Parking: {escape(invoice['meter']['parking_slot'] or '-')} · Month: {invoice['year']}-{invoice['month']:02d} ({invoice['timezone']})</div>
 <p><b>Reading previous month end:</b> {invoice['previous_month_end_reading_kwh']} kWh<br>
@@ -332,6 +318,69 @@ body{{font-family:Arial,sans-serif;margin:24px;color:#111}} h1{{margin:0 0 6px}}
 <line x1='24' y1='180' x2='{max(520, len(invoice['daily_breakdown']) * 14 + 20)}' y2='180' stroke='#333'/>
 {''.join(bars)}
 </svg>
+</section>
+"""
+
+
+def _render_invoice_html(invoice: dict, show_print_button: bool = True) -> str:
+    meter_label = invoice["meter"]["slot_code"] or f"Meter {invoice['meter']['id']}"
+    return f"""
+<!doctype html><html><head><meta charset='utf-8'><title>Invoice {escape(meter_label)}</title>
+<style>
+body{{font-family:Arial,sans-serif;margin:24px;color:#111}} h1{{margin:0 0 6px}} table{{border-collapse:collapse;width:100%;margin-top:10px}} th,td{{border:1px solid #ccc;padding:6px;font-size:12px;text-align:right}} th:first-child,td:first-child{{text-align:left}}
+.muted{{color:#666;font-size:12px}} @media print{{.no-print{{display:none}}}}
+</style></head><body>
+{'<button class="no-print" onclick="window.print()">Print / Save PDF</button>' if show_print_button else ''}
+{_invoice_html_fragment(invoice)}
+</body></html>
+"""
+
+
+@app.get("/api/invoices/active_meters")
+def list_active_meters_for_invoicing():
+    with SessionLocal() as db:
+        rows = db.execute(select(Meter).where(Meter.is_active == 1).order_by(Meter.slot_code, Meter.id)).scalars().all()
+        return [
+            {
+                "id": m.id,
+                "slot_code": m.slot_code,
+                "owner_name": m.owner_name,
+                "parking_slot": m.parking_slot,
+                "deviceID": m.device_id or m.device_uid,
+            }
+            for m in rows
+        ]
+
+
+@app.get("/api/invoices/monthly/{meter_id}/print", response_class=HTMLResponse)
+def monthly_invoice_printable(meter_id: int, year: int, month: int):
+    with SessionLocal() as db:
+        meter = db.get(Meter, meter_id)
+        if not meter:
+            raise HTTPException(status_code=404, detail="Meter not found")
+        if not bool(meter.is_active):
+            raise HTTPException(status_code=400, detail="Meter is inactive")
+        invoice = _build_monthly_invoice(db, meter, year, month)
+    return _render_invoice_html(invoice, show_print_button=True)
+
+
+@app.get("/api/invoices/all/monthly/print", response_class=HTMLResponse)
+def monthly_invoice_printable_all(year: int, month: int):
+    with SessionLocal() as db:
+        meters = db.execute(select(Meter).where(Meter.is_active == 1).order_by(Meter.slot_code, Meter.id)).scalars().all()
+        invoices = [_build_monthly_invoice(db, meter, year, month) for meter in meters]
+
+    sections = []
+    for inv in invoices:
+        sections.append(_invoice_html_fragment(inv))
+    return f"""
+<!doctype html><html><head><meta charset='utf-8'><title>All invoices {year}-{month:02d}</title>
+<style>
+body{{font-family:Arial,sans-serif;margin:24px;color:#111}} h1{{margin:0 0 6px}} table{{border-collapse:collapse;width:100%;margin-top:10px}} th,td{{border:1px solid #ccc;padding:6px;font-size:12px;text-align:right}} th:first-child,td:first-child{{text-align:left}}
+.muted{{color:#666;font-size:12px}} .invoice{{page-break-after:always; margin-bottom:28px}} .invoice:last-child{{page-break-after:auto;}} @media print{{.no-print{{display:none}} body{{margin:12px;}}}}
+</style></head><body>
+<button class='no-print' onclick='window.print()'>Print / Save PDF (all meters)</button>
+{''.join(sections) if sections else '<p>No active meters found.</p>'}
 </body></html>
 """
 

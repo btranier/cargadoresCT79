@@ -254,6 +254,7 @@
         <button class="tab" data-tab="config">Config</button>
         <button class="tab" data-tab="logs">Logs</button>
         <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="invoicing">Invoicing</button>
         <button class="tab" data-tab="readings">Readings</button>
       </div>
       <div class="row">
@@ -484,6 +485,30 @@
       </div>
     </div>
 
+    <!-- INVOICING -->
+    <div id="view-invoicing" class="view" style="display:none;">
+      <div class="grid grid-12">
+        <div class="card col-12">
+          <div class="card-h">
+            <div class="card-title">Invoicing</div>
+            <div class="row">
+              <select id="inv-meter" style="min-width:280px;"></select>
+              <input id="inv-month" type="month" style="min-width:170px;" />
+              <button class="btn" id="btn-load-invoice">Load printable view</button>
+              <button class="btn primary" id="btn-all-invoices">Generate PDF for all meters</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div class="muted" style="margin-bottom:8px;">Pick an active meter and month. The preview is the printable version. Use browser print dialog to save as PDF locally.</div>
+            <div id="invoicing-error" class="err" style="display:none;"></div>
+            <div class="scroll" style="max-height:none; height:820px;">
+              <iframe id="inv-preview" title="Invoice preview" style="width:100%; height:780px; border:0; background:#fff;"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- READINGS -->
     <div id="view-readings" class="view" style="display:none;">
       <div class="grid grid-12">
@@ -631,6 +656,7 @@
       config: document.getElementById("view-config"),
       logs: document.getElementById("view-logs"),
       dashboard: document.getElementById("view-dashboard"),
+      invoicing: document.getElementById("view-invoicing"),
       readings: document.getElementById("view-readings"),
     };
 
@@ -642,6 +668,7 @@
         Object.entries(views).forEach(([k, v]) => v.style.display = (k === key ? "block" : "none"));
         if (key === "logs") { loadLogFiles(); loadExecLogs(); }
         if (key === "dashboard") refreshDashboard();
+        if (key === "invoicing") loadInvoicingScreen();
         if (key === "readings") loadLatestReadings();
       });
     });
@@ -1094,6 +1121,61 @@
       dashBegTime.value = toDatetimeLocalValue(start);
       dashEndTime.value = toDatetimeLocalValue(end);
     }
+
+    // -------------------- Invoicing --------------------
+    const invMeter = document.getElementById("inv-meter");
+    const invMonth = document.getElementById("inv-month");
+    const btnLoadInvoice = document.getElementById("btn-load-invoice");
+    const btnAllInvoices = document.getElementById("btn-all-invoices");
+    const invPreview = document.getElementById("inv-preview");
+
+    async function loadInvoicingScreen() {
+      showError("invoicing-error", "");
+      try {
+        if (!invMonth.value) invMonth.value = new Date().toISOString().slice(0,7);
+        const meters = await apiFetch('/api/invoices/active_meters');
+        invMeter.innerHTML = '';
+        for (const m of (meters || [])) {
+          const label = `${m.slot_code || ('Meter ' + m.id)} · ${m.owner_name || '-'} · ${m.parking_slot || '-'}`;
+          const opt = document.createElement('option');
+          opt.value = String(m.id);
+          opt.textContent = label;
+          invMeter.appendChild(opt);
+        }
+        if (invMeter.value) {
+          updateInvoicePreview();
+        } else {
+          invPreview.srcdoc = '<p style="font-family:Arial;padding:16px;">No active meters available.</p>';
+        }
+      } catch (e) {
+        showError("invoicing-error", e.message || String(e));
+      }
+    }
+
+    function updateInvoicePreview() {
+      const meterId = Number(invMeter.value || 0);
+      const raw = (invMonth.value || '').trim();
+      if (!meterId || !/^\d{4}-\d{2}$/.test(raw)) {
+        return;
+      }
+      const [year, month] = raw.split('-');
+      const url = `/api/invoices/monthly/${meterId}/print?year=${Number(year)}&month=${Number(month)}`;
+      invPreview.src = url;
+    }
+
+    btnLoadInvoice?.addEventListener('click', updateInvoicePreview);
+    invMeter?.addEventListener('change', updateInvoicePreview);
+    invMonth?.addEventListener('change', updateInvoicePreview);
+    btnAllInvoices?.addEventListener('click', () => {
+      const raw = (invMonth.value || '').trim();
+      if (!/^\d{4}-\d{2}$/.test(raw)) {
+        alert('Please select a valid month.');
+        return;
+      }
+      const [year, month] = raw.split('-');
+      const url = `/api/invoices/all/monthly/print?year=${Number(year)}&month=${Number(month)}`;
+      window.open(url, '_blank', 'noopener');
+    });
 
     // -------------------- Readings (Latest 500) --------------------
     const readingsBody = document.getElementById("readings-body");
