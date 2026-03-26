@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CT79 Local Dashboard + Invoicing (HTML5 only)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--border:#1f2a44;--text:#e7eef9;--muted:#93a4bd;--acc:#00d0ff}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);margin:0}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+    .field{display:flex;flex-direction:column;gap:6px}
+    input,button{background:#0b152b;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px 10px}
+    button{cursor:pointer}
+    button:hover{background:#12203d}
+    .muted{color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #1a2440;text-align:left;font-size:13px}
+    .kpi{font-size:26px;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    @media (max-width: 900px){.grid{grid-template-columns:1fr}}
+    #status{white-space:pre-wrap}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>⚡ CT79 Local Dashboard + Invoicing</h2>
+
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>Google Drive folder ID</label><input id="folderId" value="1iENYO8hbW0BNgXUd4v_FEs9Ve5oyHOpv"/></div>
+      <div class="field"><label>API key (optional, for public/shared files)</label><input id="apiKey" placeholder="AIza..."/></div>
+      <div class="field"><label>OAuth token (optional, for private Drive)</label><input id="oauth" placeholder="ya29..."/></div>
+      <button id="btnLoadDrive">Load from Drive</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>Or drop local readings_*.csv files</label><input id="localFiles" type="file" multiple accept=".csv"/></div>
+      <button id="btnLoadLocal">Load local files</button>
+    </div>
+    <p class="muted">This HTML5 file runs fully in-browser (no backend). It loads every <b>readings_*.csv</b> file, computes meter consumption from the monotonic <b>kwh_import</b> counter, and builds dashboard + invoices.</p>
+    <div id="status" class="muted"></div>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div><div class="muted">Readings rows</div><div id="kpiRows" class="kpi">0</div></div>
+      <div><div class="muted">Active meters</div><div id="kpiMeters" class="kpi">0</div></div>
+      <div><div class="muted">Total kWh (loaded period)</div><div id="kpiKwh" class="kpi">0.00</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Dashboard (daily kWh)</h3>
+    <canvas id="dailyChart" height="120"></canvas>
+  </div>
+
+  <div class="card">
+    <h3>Invoicing (monthly)</h3>
+    <div class="row" style="margin-bottom:10px">
+      <div class="field"><label>Month</label><input id="invoiceMonth" type="month"></div>
+      <div class="field"><label>€/kWh</label><input id="priceKwh" type="number" step="0.0001" value="0.20"></div>
+      <div class="field"><label>Capacity fee (€)</label><input id="capacityFee" type="number" step="0.01" value="0"></div>
+      <div class="field"><label>Admin fee (€)</label><input id="adminFee" type="number" step="0.01" value="0"></div>
+      <button id="btnBuildInvoice">Build invoice table</button>
+      <button id="btnExportCsv">Export CSV</button>
+    </div>
+    <table>
+      <thead><tr><th>Meter</th><th>Start kWh</th><th>End kWh</th><th>Energy kWh</th><th>Energy €</th><th>Total €</th></tr></thead>
+      <tbody id="invoiceBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const state = { readings: [], byMeter: new Map(), chart: null, invoiceRows: [] };
+const $ = (id) => document.getElementById(id);
+
+function setStatus(msg) { $("status").textContent = msg; }
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+  const header = lines[0].split(",").map(s => s.trim());
+  return lines.slice(1).map(line => {
+    const cols = line.split(",");
+    const row = {};
+    header.forEach((h, i) => row[h] = (cols[i] ?? "").trim());
+    return row;
+  });
+}
+
+function meterKey(r) {
+  if (r.device_uid) return `uid:${r.device_uid}`;
+  return `${r.gateway || ""}|${r.unit || ""}`;
+}
+
+function normalizeRows(rows) {
+  return rows
+    .map(r => ({
+      ts: new Date(r.timestamp_utc || r.ts_utc || ""),
+      meter: meterKey(r),
+      gateway: r.gateway || "",
+      unit: r.unit || "",
+      kwh: Number(r.kwh_import),
+      ok: String(r.ok).toLowerCase() === "true"
+    }))
+    .filter(r => !isNaN(r.ts.getTime()) && Number.isFinite(r.kwh));
+}
+
+async function listDriveFiles() {
+  const folderId = $("folderId").value.trim();
+  const apiKey = $("apiKey").value.trim();
+  const oauth = $("oauth").value.trim();
+  if (!folderId) throw new Error("Folder ID required.");
+
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and name contains 'readings_'`);
+  const fields = encodeURIComponent("files(id,name,modifiedTime,size)");
+  let url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=1000&orderBy=name desc`;
+  if (apiKey) url += `&key=${encodeURIComponent(apiKey)}`;
+
+  const headers = oauth ? { Authorization: `Bearer ${oauth}` } : {};
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`Drive list error ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return (data.files || []).filter(f => /^readings_\d{8}.*\.csv$/i.test(f.name));
+}
+
+async function downloadDriveCsv(file) {
+  const apiKey = $("apiKey").value.trim();
+  const oauth = $("oauth").value.trim();
+  let url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`;
+  if (apiKey) url += `&key=${encodeURIComponent(apiKey)}`;
+  const headers = oauth ? { Authorization: `Bearer ${oauth}` } : {};
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`Download failed ${file.name}: ${res.status}`);
+  return await res.text();
+}
+
+function buildDerived() {
+  state.byMeter = new Map();
+  for (const r of state.readings) {
+    if (!state.byMeter.has(r.meter)) state.byMeter.set(r.meter, []);
+    state.byMeter.get(r.meter).push(r);
+  }
+  for (const arr of state.byMeter.values()) arr.sort((a,b) => a.ts - b.ts);
+
+  let totalKwh = 0;
+  const byDay = new Map();
+  for (const arr of state.byMeter.values()) {
+    for (let i=1; i<arr.length; i++) {
+      const delta = arr[i].kwh - arr[i-1].kwh;
+      if (delta > 0 && delta < 500) {
+        totalKwh += delta;
+        const day = arr[i].ts.toISOString().slice(0,10);
+        byDay.set(day, (byDay.get(day) || 0) + delta);
+      }
+    }
+  }
+
+  $("kpiRows").textContent = String(state.readings.length);
+  $("kpiMeters").textContent = String(state.byMeter.size);
+  $("kpiKwh").textContent = totalKwh.toFixed(2);
+
+  const labels = [...byDay.keys()].sort();
+  const vals = labels.map(d => byDay.get(d));
+  if (state.chart) state.chart.destroy();
+  state.chart = new Chart($("dailyChart"), {
+    type: "bar",
+    data: { labels, datasets: [{ label: "kWh/day", data: vals }] },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+
+function monthRange(yyyyMm) {
+  const [y,m] = yyyyMm.split("-").map(Number);
+  const start = new Date(Date.UTC(y, m-1, 1));
+  const end = new Date(Date.UTC(y, m, 1));
+  return { start, end };
+}
+
+function buildInvoices() {
+  const month = $("invoiceMonth").value;
+  if (!month) return alert("Select invoice month.");
+  const { start, end } = monthRange(month);
+  const price = Number($("priceKwh").value || 0);
+  const cap = Number($("capacityFee").value || 0);
+  const admin = Number($("adminFee").value || 0);
+
+  const rows = [];
+  for (const [meter, arr] of state.byMeter.entries()) {
+    const monthRows = arr.filter(r => r.ts >= start && r.ts < end);
+    if (!monthRows.length) continue;
+    const startKwh = monthRows[0].kwh;
+    const endKwh = monthRows[monthRows.length - 1].kwh;
+    const energy = Math.max(0, endKwh - startKwh);
+    const energyEur = energy * price;
+    const total = energyEur + cap + admin;
+    rows.push({ meter, startKwh, endKwh, energy, energyEur, total });
+  }
+
+  state.invoiceRows = rows.sort((a,b)=>a.meter.localeCompare(b.meter));
+  const tbody = $("invoiceBody");
+  tbody.innerHTML = "";
+  for (const r of state.invoiceRows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.meter}</td><td>${r.startKwh.toFixed(2)}</td><td>${r.endKwh.toFixed(2)}</td><td>${r.energy.toFixed(2)}</td><td>${r.energyEur.toFixed(2)}</td><td>${r.total.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function exportInvoiceCsv() {
+  if (!state.invoiceRows.length) return alert("Build invoices first.");
+  const header = ["meter","start_kwh","end_kwh","energy_kwh","energy_eur","total_eur"];
+  const lines = [header.join(",")].concat(state.invoiceRows.map(r => [
+    r.meter, r.startKwh.toFixed(3), r.endKwh.toFixed(3), r.energy.toFixed(3), r.energyEur.toFixed(2), r.total.toFixed(2)
+  ].join(",")));
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `invoices_${$("invoiceMonth").value || "month"}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$("btnLoadDrive").addEventListener("click", async () => {
+  try {
+    setStatus("Listing readings files in Drive...");
+    const files = await listDriveFiles();
+    setStatus(`Found ${files.length} files. Downloading...`);
+    const all = [];
+    for (const f of files) {
+      setStatus(`Downloading ${f.name} ...`);
+      const txt = await downloadDriveCsv(f);
+      all.push(...normalizeRows(parseCsv(txt)));
+    }
+    state.readings = all.sort((a,b)=>a.ts-b.ts);
+    buildDerived();
+    setStatus(`Loaded ${state.readings.length} rows from ${files.length} Drive files.`);
+  } catch (e) {
+    setStatus(`ERROR: ${e.message || String(e)}\nTip: if the folder is private, provide OAuth token.`);
+  }
+});
+
+$("btnLoadLocal").addEventListener("click", async () => {
+  const files = [...($("localFiles").files || [])].filter(f => /^readings_\d{8}.*\.csv$/i.test(f.name));
+  if (!files.length) return alert("Select readings_*.csv files.");
+  setStatus(`Reading ${files.length} local CSV files...`);
+  const all = [];
+  for (const f of files) {
+    const txt = await f.text();
+    all.push(...normalizeRows(parseCsv(txt)));
+  }
+  state.readings = all.sort((a,b)=>a.ts-b.ts);
+  buildDerived();
+  setStatus(`Loaded ${state.readings.length} rows from local files.`);
+});
+
+$("btnBuildInvoice").addEventListener("click", buildInvoices);
+$("btnExportCsv").addEventListener("click", exportInvoiceCsv);
+$("invoiceMonth").value = new Date().toISOString().slice(0,7);
+</script>
+</body>
+</html>
