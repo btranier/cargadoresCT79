@@ -90,3 +90,26 @@ También disponible como `make`:
 ```bash
 make import-readings CSV=readings_20260201.csv
 ```
+
+## Versión local HTML5 (sin backend)
+
+Se añadió una versión 100% cliente en:
+
+- `frontend/local.html`
+
+### Qué hace
+
+- Carga automáticamente archivos `readings_yyyymmdd*.csv` desde una carpeta de Google Drive.
+- También permite cargar los CSV localmente (arrastrar/seleccionar ficheros).
+- Calcula un dashboard local (kWh por día + KPIs).
+- Genera tabla de facturación mensual por medidor y exporta CSV.
+
+### Uso rápido
+
+1. Abre `frontend/local.html` en tu navegador.
+2. Si la carpeta Drive es pública/compartida con enlace, pega `API key` de Google Cloud (Drive API habilitada).
+3. Si la carpeta es privada, pega un `OAuth token` válido en el campo correspondiente.
+4. Pulsa **Load from Drive**.
+5. En **Invoicing**, elige mes y tarifas, luego **Build invoice table**.
+
+> Nota: por políticas de Google, una URL de carpeta de Drive no siempre es suficiente para acceso automático sin API key u OAuth token.
