@@ -100,7 +100,7 @@ Se añadió una versión 100% cliente en:
 ### Funcionalidad local
 
 - Carga incremental por período desde Google Drive: solo consulta/descarga los días seleccionados y conserva en memoria los días ya cargados.
-- Dashboard local con métricas, gráfico diario y **filtro por rango de días** después de cargar las lecturas.
+- Dashboard local con métricas, gráfico **horario apilado por parking_slot** y filtro por rango de días después de cargar las lecturas.
 - Facturación mensual local por medidor (sin backend), exportable a CSV.
 - Gestión local de mapeos `meter_id` ↔ parking/propietario/slot (editable y persistido en `localStorage`).
 - Importación de mapeos desde `data/local_standard_mapping.csv` (mapping estándar) o mediante subida manual de CSV.

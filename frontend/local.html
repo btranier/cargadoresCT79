@@ -1,76 +1,199 @@
-<!doctype html><html lang="en"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>CT79 Local Dashboard + Invoicing (HTML5)</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<style>
-:root{--bg:#0b1220;--panel:#0f172a;--border:#1f2a44;--text:#e7eef9;--muted:#93a4bd}body{font-family:system-ui;background:var(--bg);color:var(--text);margin:0}
-.wrap{max-width:1280px;margin:0 auto;padding:16px}.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px}input,button,select{background:#0b152b;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
-table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #1a2440;text-align:left;font-size:12px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.kpi{font-size:22px;font-weight:700}
-.tabs{display:flex;gap:8px}.tab.active{outline:2px solid #365082}.view{display:none}.view.active{display:block}.chart-wrap{height:420px}.muted{font-size:12px;color:var(--muted)}
-</style></head><body><div class="wrap"><h2>⚡ CT79 Local (incremental + stacked hourly)</h2>
-<div class="card"><div class="row">
-<div class="field"><label>Drive folder</label><input id="folderId" value="1iENYO8hbW0BNgXUd4v_FEs9Ve5oyHOpv"/></div>
-<div class="field"><label>API key</label><input id="apiKey"/></div><div class="field"><label>OAuth token</label><input id="oauth"/></div>
-<div class="field"><label>Start day (UTC)</label><input id="filterStart" type="date"/></div><div class="field"><label>End day (UTC)</label><input id="filterEnd" type="date"/></div>
-<button id="btnLoadDrivePeriod">Load selected period from Drive</button><button id="btnApplyFilter">Apply filter</button><button id="btnResetFilter">Reset filter</button></div>
-<div class="row" style="margin-top:8px"><div class="field"><label>Local readings files</label><input id="localFiles" type="file" multiple accept=".csv"/></div>
-<button id="btnLoadLocal">Load local files</button><button id="btnClearData">Clear cache</button><button id="btnLoadStdMap">Load standard mapping</button></div>
-<div id="status" class="muted"></div></div>
-<div class="tabs"><button class="tab active" data-view="dashboard">Dashboard</button><button class="tab" data-view="invoicing">Invoicing</button><button class="tab" data-view="mappings">Mappings</button><button class="tab" data-view="readings">Readings</button></div>
-<section id="view-dashboard" class="view active"><div class="card"><div class="grid">
-<div><div class="muted">Rows (ok only)</div><div id="kpiRows" class="kpi">0</div></div><div><div class="muted">Meters >=0.5kWh</div><div id="kpiMeters" class="kpi">0</div></div><div><div class="muted">Total kWh</div><div id="kpiKwh" class="kpi">0</div></div><div><div class="muted">Hours</div><div id="kpiHours" class="kpi">0</div></div>
-</div></div>
-<div class="card"><h3>Hourly kWh (stacked by parking_slot)</h3><div class="chart-wrap"><canvas id="hourlyChart"></canvas></div><div id="chartWarning" class="muted"></div></div>
-<div class="card"><table><thead><tr><th>meter_id</th><th>meter_key(uid)</th><th>parking_slot</th><th>owner</th><th>kWh</th></tr></thead><tbody id="topMeters"></tbody></table></div></section>
-<section id="view-invoicing" class="view"><div class="card"><div class="row"><div class="field"><label>Month</label><input id="invoiceMonth" type="month"/></div><div class="field"><label>€/kWh</label><input id="priceKwh" type="number" step="0.0001" value="0.20"/></div><div class="field"><label>Capacity €</label><input id="capacityFee" type="number" step="0.01" value="0"/></div><div class="field"><label>Admin €</label><input id="adminFee" type="number" step="0.01" value="0"/></div><button id="btnBuildInvoice">Build</button><button id="btnExportCsv">Export CSV</button></div>
-<table><thead><tr><th>meter_id</th><th>uid/key</th><th>parking</th><th>owner</th><th>energy kWh</th><th>total €</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></section>
-<section id="view-mappings" class="view"><div class="card"><div class="row"><button id="btnLoadRepoMapping">Load data/local_standard_mapping.csv</button><div class="field"><label>Import mapping CSV</label><input id="mappingFile" type="file" accept=".csv"/></div><button id="btnImportMapping">Import</button><button id="btnSaveMapping">Save local</button><button id="btnExportMapping">Export</button></div>
-<table><thead><tr><th>meter_id</th><th>match_key(ip:port|unit)</th><th>slot_code</th><th>parking_slot</th><th>owner</th><th>status</th></tr></thead><tbody id="mappingBody"></tbody></table></div></section>
-<section id="view-readings" class="view"><div class="card"><table><thead><tr><th>ts</th><th>uid/key</th><th>match_key</th><th>kwh</th><th>ok</th></tr></thead><tbody id="readingsBody"></tbody></table></div></section>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>CT79 Local Dashboard + Invoicing (HTML5)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--border:#1f2a44;--text:#e7eef9;--muted:#93a4bd}
+    body{font-family:system-ui;background:var(--bg);color:var(--text);margin:0}
+    .wrap{max-width:1320px;margin:0 auto;padding:16px}.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px}
+    input,button,select{background:#0b152b;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
+    table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #1a2440;text-align:left;font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.kpi{font-size:20px;font-weight:700}
+    .tabs{display:flex;gap:8px}.tab.active{outline:2px solid #365082}.view{display:none}.view.active{display:block}.chart-wrap{height:420px}.muted{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>⚡ CT79 Local (incremental + hourly + tariff split)</h2>
+
+  <div class="card">
+    <div class="row">
+      <div class="field"><label>Drive folder</label><input id="folderId" value="1iENYO8hbW0BNgXUd4v_FEs9Ve5oyHOpv"/></div>
+      <div class="field"><label>API key</label><input id="apiKey"/></div>
+      <div class="field"><label>OAuth token</label><input id="oauth"/></div>
+      <div class="field"><label>Start (UTC day)</label><input id="filterStart" type="date"/></div>
+      <div class="field"><label>End (UTC day)</label><input id="filterEnd" type="date"/></div>
+      <button id="btnLoadDrivePeriod">Load period from Drive</button>
+      <button id="btnApplyFilter">Apply filter</button>
+      <button id="btnResetFilter">Reset</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="field"><label>Local readings files</label><input id="localFiles" type="file" multiple accept=".csv"/></div>
+      <button id="btnLoadLocal">Load local files</button>
+      <button id="btnClearData">Clear cache</button>
+      <button id="btnLoadStdMap">Load standard mapping</button>
+    </div>
+    <div id="status" class="muted"></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-view="dashboard">Dashboard</button>
+    <button class="tab" data-view="invoicing">Invoicing</button>
+    <button class="tab" data-view="mappings">Mappings</button>
+    <button class="tab" data-view="readings">Readings</button>
+  </div>
+
+  <section id="view-dashboard" class="view active">
+    <div class="card"><div class="grid">
+      <div><div class="muted">Rows (ok only)</div><div id="kpiRows" class="kpi">0</div></div>
+      <div><div class="muted">Meters ≥0.5kWh</div><div id="kpiMeters" class="kpi">0</div></div>
+      <div><div class="muted">Total kWh</div><div id="kpiKwh" class="kpi">0</div></div>
+      <div><div class="muted">Hours</div><div id="kpiHours" class="kpi">0</div></div>
+      <div><div class="muted">Max hourly kWh</div><div id="kpiMaxHourly" class="kpi">0</div></div>
+    </div></div>
+    <div class="card"><h3>Hourly kWh (stacked by parking_slot)</h3><div class="chart-wrap"><canvas id="hourlyChart"></canvas></div><div id="chartWarning" class="muted"></div></div>
+    <div class="card"><h3>Consumption split by tariff periods (P1..P6)</h3>
+      <table><thead><tr><th>meter_id</th><th>meter(uid)</th><th>parking_slot</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Total</th></tr></thead><tbody id="topMeters"></tbody></table>
+    </div>
+  </section>
+
+  <section id="view-invoicing" class="view"><div class="card">
+    <div class="row"><div class="field"><label>Month</label><input id="invoiceMonth" type="month"/></div><div class="field"><label>€/kWh</label><input id="priceKwh" type="number" step="0.0001" value="0.20"/></div><div class="field"><label>Capacity €</label><input id="capacityFee" type="number" step="0.01" value="0"/></div><div class="field"><label>Admin €</label><input id="adminFee" type="number" step="0.01" value="0"/></div><button id="btnBuildInvoice">Build</button><button id="btnExportCsv">Export CSV</button></div>
+    <table><thead><tr><th>meter_id</th><th>uid/key</th><th>parking</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Energy kWh</th><th>Total €</th></tr></thead><tbody id="invoiceBody"></tbody></table>
+  </div></section>
+
+  <section id="view-mappings" class="view"><div class="card">
+    <div class="row"><button id="btnLoadRepoMapping">Load data/local_standard_mapping.csv</button><div class="field"><label>Import mapping CSV</label><input id="mappingFile" type="file" accept=".csv"/></div><button id="btnImportMapping">Import</button><button id="btnSaveMapping">Save local</button><button id="btnExportMapping">Export</button></div>
+    <table><thead><tr><th>meter_id</th><th>match_key(ip:port|unit)</th><th>slot_code</th><th>owner</th><th>status</th></tr></thead><tbody id="mappingBody"></tbody></table>
+  </div></section>
+
+  <section id="view-readings" class="view"><div class="card"><table><thead><tr><th>ts</th><th>uid/key</th><th>match_key</th><th>kwh</th><th>ok</th></tr></thead><tbody id="readingsBody"></tbody></table></div></section>
 </div>
+
 <script>
+const TZ = 'Europe/Madrid';
+const MIN_KWH = 0.5;
+const PERIODS = ['P1','P2','P3','P4','P5','P6'];
+const MAP_KEY='ct79_map_v4';
 const state={allReadings:[],filteredReadings:[],byMeter:new Map(),chart:null,invoiceRows:[],driveRowsByDate:new Map(),driveFilesByDate:new Map(),mappingByMatchKey:new Map(),meterIdByMeterKey:new Map(),meterMatchByMeterKey:new Map()};
-const $=id=>document.getElementById(id),MAP_KEY='ct79_map_v3',MIN_KWH=0.5;
-const STD_MAPPING_CSV=`id,gateway_id,gateway_ip,port,unit_id,slot_code,description,status\n1,1,192.168.1.101,502,1,P246,Nacho,Activo\n2,1,192.168.1.101,502,2,P154,Oscar,Activo\n3,1,192.168.1.101,502,3,P133,Asterio,Activo\n4,1,192.168.1.101,502,4,P205,a,Activo\n5,1,192.168.1.101,502,5,P131,José Maria,Activo\n6,1,192.168.1.101,502,6,P131,Valle,Activo\n7,4,192.168.1.104,502,24,P318,Arancha,Activo\n8,4,192.168.1.104,502,25,P361,Ben,Activo\n9,2,192.168.1.102,502,2,P302,Carlos,Activo\n97,1,192.168.1.101,502,7,P120,Angel,Activo\n98,1,192.168.1.101,502,8,P228,Marta,Activo\n99,1,192.168.1.101,502,9,P229,Jimena,Activo`;
-function setStatus(t){$('status').textContent=t} function esc(s){return String(s??'').replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]))}
-function parseCsv(text){let rows=[],row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(q){if(c==='"'&&n==='"'){cell+='"';i++;}else if(c==='"')q=false;else cell+=c;}else{if(c==='"')q=true;else if(c===','){row.push(cell);cell='';}else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}else if(c!=='\r')cell+=c;}}if(cell.length||row.length){row.push(cell);rows.push(row);}if(!rows.length)return[];const h=rows[0].map(x=>x.trim());return rows.slice(1).filter(r=>r.some(x=>x.trim())).map(r=>{const o={};h.forEach((k,i)=>o[k]=(r[i]??'').trim());return o;});}
-function dayStr(d){return d.toISOString().slice(0,10)} function hourStr(d){return d.toISOString().slice(0,13)+':00'} function yyyymmdd(s){return s.replaceAll('-','')}
-function enumDays(s,e){const out=[];let d=new Date(`${s}T00:00:00Z`),end=new Date(`${e}T00:00:00Z`);while(d<=end){out.push(dayStr(d));d.setUTCDate(d.getUTCDate()+1);}return out;}
-function normalizeRows(rows){return rows.map(r=>{const ts=new Date(r.timestamp_utc||r.ts_utc||'');const gw=(r.gateway||'').split(':')[0];const port=((r.gateway||'').split(':')[1]||'502').trim();const unit=String(r.unit||'');const uid=(r.device_uid||'').trim();const meterKey=uid?`uid:${uid}`:`${gw}:${port}|${unit}`;const matchKey=`${gw}:${port}|${unit}`;const ok=String(r.ok).toLowerCase()==='true';return {ts,tsStr:r.timestamp_utc||'',meterKey,uid,matchKey,gw,port,unit,kwh:Number(r.kwh_import),ok};}).filter(r=>!Number.isNaN(r.ts.getTime())&&Number.isFinite(r.kwh)&&r.ok);} // ignore not responding
+const $ = id => document.getElementById(id);
+const STD_MAPPING_FALLBACK = `id,gateway_id,gateway_ip,port,unit_id,slot_code,description,status\n1,1,192.168.1.101,502,1,P246,Nacho,Activo\n2,1,192.168.1.101,502,2,P154,Oscar,Activo\n3,1,192.168.1.101,502,3,P133,Asterio,Activo\n4,1,192.168.1.101,502,4,P205,a,Activo\n5,1,192.168.1.101,502,5,P131,José Maria,Activo\n6,1,192.168.1.101,502,6,P131,Valle,Activo\n7,4,192.168.1.104,502,24,P318,Arancha,Activo\n8,4,192.168.1.104,502,25,P361,Ben,Activo\n9,2,192.168.1.102,502,2,P302,Carlos,Activo\n97,1,192.168.1.101,502,7,P120,Angel,Activo\n98,1,192.168.1.101,502,8,P228,Marta,Activo\n99,1,192.168.1.101,502,9,P229,Jimena,Activo`;
+
+function setStatus(x){$('status').textContent=x;}
+function esc(s){return String(s??'').replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]));}
+function dayStr(d){return d.toISOString().slice(0,10);} function hourLabel(d){return d.toISOString().slice(0,13)+':00';}
+function toYmdNoDash(s){return s.replaceAll('-','');}
+function parseCsv(text){let rows=[],row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(q){if(c==='"'&&n==='"'){cell+='"';i++;}else if(c==='"')q=false;else cell+=c;}else{if(c==='"')q=true;else if(c===','){row.push(cell);cell='';}else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}else if(c!=='\r')cell+=c;}}if(cell||row.length){row.push(cell);rows.push(row);}if(!rows.length)return[];const h=rows[0].map(x=>x.trim());return rows.slice(1).filter(r=>r.some(x=>x.trim())).map(r=>{const o={};h.forEach((k,i)=>o[k]=(r[i]??'').trim());return o;});}
+function enumerateDays(s,e){const out=[];let d=new Date(`${s}T00:00:00Z`),end=new Date(`${e}T00:00:00Z`);while(d<=end){out.push(dayStr(d));d.setUTCDate(d.getUTCDate()+1);}return out;}
+function parseGateway(g){const [ip,port='502']=String(g||'').split(':');return {ip:(ip||'').trim(),port:String(port).trim()};}
+
+function normalizeRows(rows){
+  return rows.map(r=>{
+    const ts = new Date(r.timestamp_utc||r.ts_utc||'');
+    const {ip,port}=parseGateway(r.gateway);
+    const unit=String(r.unit||'');
+    const uid=(r.device_uid||'').trim();
+    const meterKey = uid ? `uid:${uid}` : `${ip}:${port}|${unit}`;
+    return {ts,tsStr:r.timestamp_utc||'',meterKey,matchKey:`${ip}:${port}|${unit}`,kwh:Number(r.kwh_import),ok:String(r.ok).toLowerCase()==='true'};
+  }).filter(r=>!Number.isNaN(r.ts.getTime()) && Number.isFinite(r.kwh) && r.ok); // ignore not responding
+}
 function indexByMeter(rows){const m=new Map();rows.forEach(r=>{if(!m.has(r.meterKey))m.set(r.meterKey,[]);m.get(r.meterKey).push(r);state.meterMatchByMeterKey.set(r.meterKey,r.matchKey);});m.forEach(a=>a.sort((x,y)=>x.ts-y.ts));return m;}
-function meterTotals(map){const t=new Map();map.forEach((arr,k)=>{let s=0;for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)s+=d;}t.set(k,s);});return t;}
-function resolveMeta(meterKey){const mk=state.meterMatchByMeterKey.get(meterKey)||meterKey;const m=state.mappingByMatchKey.get(mk)||{};return {meter_id:m.id||state.meterIdByMeterKey.get(meterKey)||'',parking_slot:m.slot_code||m.parking_slot||'UNMAPPED',owner:m.description||m.owner_name||'',status:m.status||'Activo',match_key:mk};}
 function ensureMeterIds(){const keys=[...new Set(state.allReadings.map(r=>r.meterKey))].sort();let used=new Set([...state.meterIdByMeterKey.values()]),next=1;for(const k of keys){if(!state.meterIdByMeterKey.has(k)){while(used.has(next))next++;state.meterIdByMeterKey.set(k,next);used.add(next);}}}
+
+// 3.0TD tariff
+function easterSunday(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(Date.UTC(y,mo-1,da));}
+function isHolidayMadrid(localDate){const y=localDate.getUTCFullYear();const d=localDate.toISOString().slice(0,10);const e=easterSunday(y);const gf=new Date(e);gf.setUTCDate(e.getUTCDate()-2);const set=new Set([`${y}-01-01`,`${y}-01-06`,gf.toISOString().slice(0,10),`${y}-05-01`,`${y}-08-15`,`${y}-10-12`,`${y}-11-01`,`${y}-12-06`,`${y}-12-08`,`${y}-12-25`]);return set.has(d);} 
+function toMadridParts(utcDate){const s=utcDate.toLocaleString('sv-SE',{timeZone:TZ,hour12:false}); // YYYY-MM-DD HH:mm:ss
+  const [d,t]=s.split(' ');const [Y,M,D]=d.split('-').map(Number);const [h]=t.split(':').map(Number);const fakeUTC = new Date(Date.UTC(Y,M-1,D,h,0,0));return {date:fakeUTC,month:M,hour:h,weekday:fakeUTC.getUTCDay()};}
+function tariffPeriodAt(utcDate){const p=toMadridParts(utcDate);if(p.weekday===0||p.weekday===6||isHolidayMadrid(p.date))return 'P6';
+  const h=p.hour,m=p.month;const map={1:['P6','P6','P6','P6','P6','P6','P6','P6','P2','P2','P1','P1','P1','P1','P2','P2','P2','P2','P1','P1','P1','P1','P2','P2'],2:null,7:null,12:null,3:['P6','P6','P6','P6','P6','P6','P6','P6','P3','P3','P2','P2','P2','P2','P3','P3','P3','P3','P2','P2','P2','P2','P3','P3'],11:null,6:['P6','P6','P6','P6','P6','P6','P6','P6','P4','P4','P3','P3','P3','P3','P4','P4','P4','P4','P3','P3','P3','P3','P4','P4'],8:null,9:null,4:['P6','P6','P6','P6','P6','P6','P6','P6','P5','P5','P4','P4','P4','P4','P5','P5','P5','P5','P4','P4','P4','P4','P5','P5'],5:null,10:null};
+  if(map[2]==null)map[2]=map[1]; if(map[7]==null)map[7]=map[1]; if(map[12]==null)map[12]=map[1]; if(map[11]==null)map[11]=map[3]; if(map[8]==null)map[8]=map[6]; if(map[9]==null)map[9]=map[6]; if(map[5]==null)map[5]=map[4]; if(map[10]==null)map[10]=map[4];
+  return map[m][h];
+}
+
+// Allocates interval delta by prorata over hours and tariff periods.
+function allocateDelta(ts0, ts1, delta, slot, outHourly, outPeriods){
+  const t0=ts0.getTime(), t1=ts1.getTime(); if(!(t1>t0) || delta<=0) return;
+  const totalMs=t1-t0; let cursor=t0;
+  while(cursor<t1){
+    const d=new Date(cursor); d.setUTCMinutes(0,0,0); d.setUTCHours(d.getUTCHours()+1); const edge=Math.min(d.getTime(),t1);
+    const share=(edge-cursor)/totalMs, part=delta*share; const mid=new Date((cursor+edge)/2);
+    const hour=hourLabel(mid), period=tariffPeriodAt(mid);
+    const hk=`${hour}|${slot}`; outHourly.set(hk,(outHourly.get(hk)||0)+part);
+    outPeriods[period]=(outPeriods[period]||0)+part;
+    cursor=edge;
+  }
+}
+
+function computeConsumption(map){
+  const res={meter:new Map(),hourlySlot:new Map(),maxHourly:0};
+  map.forEach((arr,meterKey)=>{
+    const periods={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};
+    const slot=resolveMeta(meterKey).parking_slot;
+    for(let i=1;i<arr.length;i++){
+      const d=arr[i].kwh-arr[i-1].kwh;
+      if(d>0&&d<500){allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,res.hourlySlot,periods);periods.total+=d;}
+    }
+    if(periods.total>=MIN_KWH) res.meter.set(meterKey,periods);
+  });
+  // remove hourly contributions for filtered-out meters not tracked separately: recompute from valid meters only
+  const hourly=new Map();
+  res.meter.forEach((_,meterKey)=>{
+    const arr=map.get(meterKey),slot=resolveMeta(meterKey).parking_slot;for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500){allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,hourly,{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0});}}
+  });
+  res.hourlySlot=hourly;
+  hourly.forEach(v=>{if(v>res.maxHourly)res.maxHourly=v;});
+  return res;
+}
+
+function resolveMeta(meterKey){const mk=state.meterMatchByMeterKey.get(meterKey)||meterKey;const m=state.mappingByMatchKey.get(mk)||{};return {meter_id:m.id||state.meterIdByMeterKey.get(meterKey)||'',parking_slot:m.slot_code||'UNMAPPED',owner:m.description||'',match_key:mk};}
 function range(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)return null;return{start:new Date(`${s}T00:00:00Z`),end:new Date(`${e}T23:59:59Z`)}}
 function rebuildFromCache(){const all=[];for(const rows of state.driveRowsByDate.values())all.push(...rows);state.allReadings=all.sort((a,b)=>a.ts-b.ts);ensureMeterIds();if(state.allReadings.length){if(!$('filterStart').value)$('filterStart').value=dayStr(state.allReadings[0].ts);if(!$('filterEnd').value)$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);}applyFilterAndRender();renderMappingTable();}
-function applyFilterAndRender(){const rr=range();state.filteredReadings=rr?state.allReadings.filter(r=>r.ts>=rr.start&&r.ts<=rr.end):[...state.allReadings];state.byMeter=indexByMeter(state.filteredReadings);renderDashboard();renderReadings();renderTopMeters();}
-function renderDashboard(){const totals=meterTotals(state.byMeter);const validMeters=[...totals.entries()].filter(([,k])=>k>=MIN_KWH).map(([m])=>m);const byHourSlot=new Map();let total=0;validMeters.forEach(meter=>{const arr=state.byMeter.get(meter)||[];for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500){const h=hourStr(arr[i].ts),slot=resolveMeta(meter).parking_slot;const key=`${h}|${slot}`;byHourSlot.set(key,(byHourSlot.get(key)||0)+d);total+=d;}}});
-const hours=[...new Set([...byHourSlot.keys()].map(k=>k.split('|')[0]))].sort();const slots=[...new Set([...byHourSlot.keys()].map(k=>k.split('|')[1]))].sort();
-$('kpiRows').textContent=String(state.filteredReadings.length);$('kpiMeters').textContent=String(validMeters.length);$('kpiKwh').textContent=total.toFixed(3);$('kpiHours').textContent=String(hours.length);
-if(state.chart)state.chart.destroy();if(typeof Chart==='undefined'){ $('chartWarning').textContent='Chart.js not available';return;} $('chartWarning').textContent='';
-const datasets=slots.map((slot,idx)=>({label:slot,data:hours.map(h=>byHourSlot.get(`${h}|${slot}`)||0),backgroundColor:`hsl(${(idx*47)%360} 70% 55%)`,stack:'kwh'}));
-state.chart=new Chart($('hourlyChart'),{type:'bar',data:{labels:hours,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});
+function applyFilterAndRender(){const rr=range();state.filteredReadings=rr?state.allReadings.filter(r=>r.ts>=rr.start&&r.ts<=rr.end):[...state.allReadings];state.byMeter=indexByMeter(state.filteredReadings);renderDashboard();renderReadings();renderTariffTable();}
+
+function renderDashboard(){
+  const c=computeConsumption(state.byMeter); let total=0; c.meter.forEach(v=>total+=v.total);
+  const hours=[...new Set([...c.hourlySlot.keys()].map(k=>k.split('|')[0]))].sort(); const slots=[...new Set([...c.hourlySlot.keys()].map(k=>k.split('|')[1]))].sort();
+  $('kpiRows').textContent=String(state.filteredReadings.length); $('kpiMeters').textContent=String(c.meter.size); $('kpiKwh').textContent=total.toFixed(3); $('kpiHours').textContent=String(hours.length); $('kpiMaxHourly').textContent=c.maxHourly.toFixed(3);
+  if(state.chart)state.chart.destroy(); if(typeof Chart==='undefined'){ $('chartWarning').textContent='Chart.js not available'; return; } $('chartWarning').textContent='';
+  const datasets=slots.map((slot,idx)=>({label:slot,data:hours.map(h=>c.hourlySlot.get(`${h}|${slot}`)||0),backgroundColor:`hsl(${(idx*47)%360} 70% 55%)`,stack:'kwh'}));
+  state.chart=new Chart($('hourlyChart'),{type:'bar',data:{labels:hours,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});
 }
-function renderTopMeters(){const totals=meterTotals(state.byMeter);const rows=[...totals.entries()].filter(([,k])=>k>=MIN_KWH).map(([m,k])=>({meterKey:m,kwh:k,...resolveMeta(m)})).sort((a,b)=>b.kwh-a.kwh);$('topMeters').innerHTML=rows.length?rows.map(r=>`<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${esc(r.owner)}</td><td>${r.kwh.toFixed(3)}</td></tr>`).join(''):`<tr><td colspan='5' class='muted'>No data</td></tr>`;}
+function renderTariffTable(){const c=computeConsumption(state.byMeter);const rows=[...c.meter.entries()].map(([meterKey,p])=>({meterKey,...p,...resolveMeta(meterKey)})).sort((a,b)=>b.total-a.total);$('topMeters').innerHTML=rows.length?rows.map(r=>`<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${r.P1.toFixed(3)}</td><td>${r.P2.toFixed(3)}</td><td>${r.P3.toFixed(3)}</td><td>${r.P4.toFixed(3)}</td><td>${r.P5.toFixed(3)}</td><td>${r.P6.toFixed(3)}</td><td>${r.total.toFixed(3)}</td></tr>`).join(''):`<tr><td colspan='10' class='muted'>No data</td></tr>`;}
 function renderReadings(){const rows=[...state.filteredReadings].sort((a,b)=>b.ts-a.ts).slice(0,500);$('readingsBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${r.kwh.toFixed(3)}</td><td>${r.ok}</td></tr>`).join(''):`<tr><td colspan='5' class='muted'>No data</td></tr>`;}
-function buildInvoices(){const m=$('invoiceMonth').value;if(!m)return alert('Select month');const [y,mo]=m.split('-').map(Number),s=new Date(Date.UTC(y,mo-1,1)),e=new Date(Date.UTC(y,mo,1));const p=Number($('priceKwh').value||0),c=Number($('capacityFee').value||0),a=Number($('adminFee').value||0);const by=indexByMeter(state.allReadings.filter(r=>r.ts>=s&&r.ts<e));const totals=meterTotals(by);const rows=[];by.forEach((arr,key)=>{const k=totals.get(key)||0;if(k<MIN_KWH)return;const totalE=k*p+c+a;rows.push({meterKey:key,energy:k,totalE,...resolveMeta(key)});});state.invoiceRows=rows.sort((x,y)=>x.meter_id-y.meter_id);$('invoiceBody').innerHTML=state.invoiceRows.length?state.invoiceRows.map(r=>`<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${esc(r.owner)}</td><td>${r.energy.toFixed(3)}</td><td>${r.totalE.toFixed(2)}</td></tr>`).join(''):`<tr><td colspan='6' class='muted'>No rows</td></tr>`;}
-function exportInvoices(){if(!state.invoiceRows.length)return alert('Build first');const lines=['meter_id,meter_key,parking_slot,owner_name,energy_kwh,total_eur',...state.invoiceRows.map(r=>`${r.meter_id},"${r.meterKey}","${r.parking_slot}","${r.owner}",${r.energy.toFixed(3)},${r.totalE.toFixed(2)}`)];download('invoices.csv',lines.join('\n'));}
-function download(name,text){const b=new Blob([text],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href)}
-async function driveReq(url){const t=$('oauth').value.trim(),h=t?{Authorization:`Bearer ${t}`}:{},r=await fetch(url,{headers:h});if(!r.ok)throw new Error(`${r.status} ${await r.text()}`);return r;}
-async function findFilesForDay(d){if(state.driveFilesByDate.has(d))return state.driveFilesByDate.get(d);const folder=$('folderId').value.trim(),api=$('apiKey').value.trim(),tag=`readings_${yyyymmdd(d)}`;let url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folder}' in parents and trashed=false and name contains '${tag}'`)}&fields=files(id,name)&pageSize=100`;if(api)url+=`&key=${encodeURIComponent(api)}`;const files=(await (await driveReq(url)).json()).files||[];state.driveFilesByDate.set(d,files.filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name)));return state.driveFilesByDate.get(d);}
-async function dlFile(file){const api=$('apiKey').value.trim();let url=`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`;if(api)url+=`&key=${encodeURIComponent(api)}`;return await (await driveReq(url)).text();}
-async function loadPeriod(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)throw new Error('select start/end');if(s>e)throw new Error('start>end');const days=enumDays(s,e),missing=days.filter(d=>!state.driveRowsByDate.has(d));if(!missing.length){setStatus(`No missing files for ${s}..${e}. Using memory cache.`);applyFilterAndRender();return;}setStatus(`Missing days ${missing.length}/${days.length}. Querying Drive...`);for(const d of missing){const files=await findFilesForDay(d);let rows=[];for(const f of files){rows.push(...normalizeRows(parseCsv(await dlFile(f))));}state.driveRowsByDate.set(d,rows);}rebuildFromCache();setStatus(`Loaded ${s}..${e}. Cached days: ${state.driveRowsByDate.size}.`);}
-async function loadLocal(){const fs=[...($('localFiles').files||[])].filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name));if(!fs.length)return alert('Select files');for(const f of fs){const rows=normalizeRows(parseCsv(await f.text()));if(!rows.length)continue;const d=dayStr(rows[0].ts);state.driveRowsByDate.set(d,(state.driveRowsByDate.get(d)||[]).concat(rows));}rebuildFromCache();setStatus(`Loaded ${fs.length} local files.`);}
-function importMappingRows(rows){rows.forEach(r=>{const id=Number(r.id||0),ip=(r.gateway_ip||r.gateway_host||r.gateway||'').split(':')[0],port=String(r.port||r.gateway_port||'502'),u=String(r.unit_id||r.unit||''),match=`${ip}:${port}|${u}`;const rec={id,slot_code:r.slot_code||'',description:r.description||r.owner_name||'',status:r.status||'Activo',parking_slot:r.slot_code||''};state.mappingByMatchKey.set(match,rec);});renderMappingTable();renderTopMeters();}
-function renderMappingTable(){const keys=[...state.mappingByMatchKey.keys()].sort();$('mappingBody').innerHTML=keys.length?keys.map(k=>{const m=state.mappingByMatchKey.get(k)||{};return `<tr data-key="${esc(k)}"><td>${m.id||''}</td><td>${esc(k)}</td><td><input data-k="slot_code" value="${esc(m.slot_code||'')}"></td><td><input data-k="parking_slot" value="${esc(m.parking_slot||'')}"></td><td><input data-k="description" value="${esc(m.description||'')}"></td><td><select data-k="status"><option ${m.status==='Activo'?'selected':''}>Activo</option><option ${m.status==='Inactivo'?'selected':''}>Inactivo</option></select></td></tr>`;}).join(''):`<tr><td colspan='6' class='muted'>No mappings</td></tr>`;$('mappingBody').querySelectorAll('tr[data-key]').forEach(tr=>{const k=tr.getAttribute('data-key');tr.querySelectorAll('input,select').forEach(inp=>inp.addEventListener('change',()=>{const f=inp.getAttribute('data-k');const cur=state.mappingByMatchKey.get(k)||{};cur[f]=inp.value;state.mappingByMatchKey.set(k,cur);}));});}
+
+function buildInvoices(){const m=$('invoiceMonth').value;if(!m)return alert('Select month');const [y,mo]=m.split('-').map(Number);const s=new Date(Date.UTC(y,mo-1,1)),e=new Date(Date.UTC(y,mo,1));const by=indexByMeter(state.allReadings.filter(r=>r.ts>=s&&r.ts<e));const c=computeConsumption(by);const p=Number($('priceKwh').value||0),cap=Number($('capacityFee').value||0),adm=Number($('adminFee').value||0);state.invoiceRows=[...c.meter.entries()].map(([meterKey,t])=>({meterKey,...t,totalE:t.total*p+cap+adm,...resolveMeta(meterKey)})).sort((a,b)=>a.meter_id-b.meter_id);$('invoiceBody').innerHTML=state.invoiceRows.length?state.invoiceRows.map(r=>`<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${r.P1.toFixed(3)}</td><td>${r.P2.toFixed(3)}</td><td>${r.P3.toFixed(3)}</td><td>${r.P4.toFixed(3)}</td><td>${r.P5.toFixed(3)}</td><td>${r.P6.toFixed(3)}</td><td>${r.total.toFixed(3)}</td><td>${r.totalE.toFixed(2)}</td></tr>`).join(''):`<tr><td colspan='11' class='muted'>No rows</td></tr>`;}
+function exportInvoices(){if(!state.invoiceRows.length)return alert('Build first');const lines=['meter_id,meter_key,parking_slot,P1,P2,P3,P4,P5,P6,total_kwh,total_eur',...state.invoiceRows.map(r=>`${r.meter_id},"${r.meterKey}","${r.parking_slot}",${r.P1.toFixed(3)},${r.P2.toFixed(3)},${r.P3.toFixed(3)},${r.P4.toFixed(3)},${r.P5.toFixed(3)},${r.P6.toFixed(3)},${r.total.toFixed(3)},${r.totalE.toFixed(2)}`)];download('invoices.csv',lines.join('\n'));}
+function download(name,text){const b=new Blob([text],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href);}
+
+async function driveReq(url){try{const t=$('oauth').value.trim(),h=t?{Authorization:`Bearer ${t}`}:{},r=await fetch(url,{headers:h});if(!r.ok)throw new Error(`${r.status} ${await r.text()}`);return r;}catch(e){if(String(e).includes('Failed to fetch'))throw new Error('Drive: Failed to fetch. Open this file via http://localhost (not file://), check browser network/CORS, API key/token and internet. You can still load local CSV files.');throw e;}}
+async function findFilesForDay(d){if(state.driveFilesByDate.has(d))return state.driveFilesByDate.get(d);const folder=$('folderId').value.trim(),api=$('apiKey').value.trim(),tag=`readings_${toYmdNoDash(d)}`;let url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folder}' in parents and trashed=false and name contains '${tag}'`)}&fields=files(id,name)&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true`;if(api)url+=`&key=${encodeURIComponent(api)}`;const files=(await (await driveReq(url)).json()).files||[];const filtered=files.filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name));state.driveFilesByDate.set(d,filtered);return filtered;}
+async function dlFile(file){const api=$('apiKey').value.trim();let url=`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media&supportsAllDrives=true`;if(api)url+=`&key=${encodeURIComponent(api)}`;return await (await driveReq(url)).text();}
+async function loadPeriod(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)throw new Error('select start/end');if(s>e)throw new Error('start>end');const days=enumerateDays(s,e),missing=days.filter(d=>!state.driveRowsByDate.has(d));if(!missing.length){setStatus(`No missing files for ${s}..${e}. Using memory cache.`);applyFilterAndRender();return;}setStatus(`Missing days ${missing.length}/${days.length}. Querying Drive...`);for(const d of missing){const files=await findFilesForDay(d);let rows=[];for(const f of files)rows.push(...normalizeRows(parseCsv(await dlFile(f))));state.driveRowsByDate.set(d,rows);}rebuildFromCache();setStatus(`Loaded ${s}..${e}. Cached days: ${state.driveRowsByDate.size}.`);} 
+async function loadLocal(){const fs=[...($('localFiles').files||[])].filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name));if(!fs.length)return alert('Select files');for(const f of fs){const rows=normalizeRows(parseCsv(await f.text()));if(!rows.length)continue;const d=dayStr(rows[0].ts);state.driveRowsByDate.set(d,(state.driveRowsByDate.get(d)||[]).concat(rows));}rebuildFromCache();setStatus(`Loaded ${fs.length} local files.`);} 
+
+function importMappingRows(rows){rows.forEach(r=>{const id=Number(r.id||0),ip=(r.gateway_ip||r.gateway_host||'').split(':')[0],port=String(r.port||r.gateway_port||'502'),u=String(r.unit_id||'');state.mappingByMatchKey.set(`${ip}:${port}|${u}`,{id,slot_code:r.slot_code||'',description:r.description||'',status:r.status||'Activo'});});renderMappingTable();}
+function renderMappingTable(){const keys=[...state.mappingByMatchKey.keys()].sort();$('mappingBody').innerHTML=keys.length?keys.map(k=>{const m=state.mappingByMatchKey.get(k)||{};return `<tr data-k="${esc(k)}"><td>${m.id||''}</td><td>${esc(k)}</td><td><input data-f="slot_code" value="${esc(m.slot_code||'')}"></td><td><input data-f="description" value="${esc(m.description||'')}"></td><td><select data-f="status"><option ${m.status==='Activo'?'selected':''}>Activo</option><option ${m.status==='Inactivo'?'selected':''}>Inactivo</option></select></td></tr>`;}).join(''):`<tr><td colspan='5' class='muted'>No mappings</td></tr>`;$('mappingBody').querySelectorAll('tr[data-k]').forEach(tr=>{const k=tr.getAttribute('data-k');tr.querySelectorAll('input,select').forEach(inp=>inp.addEventListener('change',()=>{const f=inp.getAttribute('data-f');const cur=state.mappingByMatchKey.get(k)||{};cur[f]=inp.value;state.mappingByMatchKey.set(k,cur);}));});}
 function saveMapping(){localStorage.setItem(MAP_KEY,JSON.stringify(Object.fromEntries(state.mappingByMatchKey.entries())));setStatus('Mapping saved locally.');}
 function loadMapping(){try{const raw=localStorage.getItem(MAP_KEY);if(raw)state.mappingByMatchKey=new Map(Object.entries(JSON.parse(raw)));}catch(_){}}
-function exportMapping(){const lines=['id,match_key,slot_code,parking_slot,description,status'];for(const [k,m] of state.mappingByMatchKey.entries())lines.push([m.id||'',`"${k}"`,`"${m.slot_code||''}"`,`"${m.parking_slot||''}"`,`"${m.description||''}"`,`"${m.status||''}"`].join(','));download('local_mapping.csv',lines.join('\n'));}
-async function loadStdMapping(){try{const txt=await (await fetch('../data/local_standard_mapping.csv')).text();importMappingRows(parseCsv(txt));setStatus('Loaded standard mapping file.');}catch{importMappingRows(parseCsv(STD_MAPPING_CSV));setStatus('Loaded embedded standard mapping.');}}
+function exportMapping(){const lines=['id,match_key,slot_code,description,status'];for(const [k,m] of state.mappingByMatchKey.entries())lines.push(`${m.id||''},"${k}","${m.slot_code||''}","${m.description||''}","${m.status||''}"`);download('local_mapping.csv',lines.join('\n'));}
+async function loadStdMapping(){try{const txt=await (await fetch('../data/local_standard_mapping.csv')).text();importMappingRows(parseCsv(txt));setStatus('Standard mapping loaded from file.');}catch{importMappingRows(parseCsv(STD_MAPPING_FALLBACK));setStatus('Standard mapping loaded from embedded fallback.');}}
+
 function switchView(v){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.view===v));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${v}`));}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
-$('btnLoadDrivePeriod').addEventListener('click',()=>loadPeriod().catch(e=>setStatus(`ERROR: ${e.message||e}`)));$('btnApplyFilter').addEventListener('click',applyFilterAndRender);$('btnResetFilter').addEventListener('click',()=>{if(!state.allReadings.length)return;$('filterStart').value=dayStr(state.allReadings[0].ts);$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);applyFilterAndRender();});$('btnLoadLocal').addEventListener('click',()=>loadLocal().catch(e=>setStatus(`ERROR: ${e.message||e}`)));$('btnClearData').addEventListener('click',()=>{state.allReadings=[];state.filteredReadings=[];state.driveRowsByDate.clear();state.driveFilesByDate.clear();applyFilterAndRender();setStatus('Cache cleared');});$('btnBuildInvoice').addEventListener('click',buildInvoices);$('btnExportCsv').addEventListener('click',exportInvoices);
-$('btnLoadRepoMapping').addEventListener('click',loadStdMapping);$('btnLoadStdMap').addEventListener('click',loadStdMapping);$('btnImportMapping').addEventListener('click',async()=>{const f=$('mappingFile').files?.[0];if(!f)return alert('Choose mapping CSV');importMappingRows(parseCsv(await f.text()));});$('btnSaveMapping').addEventListener('click',saveMapping);$('btnExportMapping').addEventListener('click',exportMapping);
-$('invoiceMonth').value=new Date().toISOString().slice(0,7);loadMapping();loadStdMapping();
-</script></body></html>
+$('btnLoadDrivePeriod').addEventListener('click',()=>loadPeriod().catch(e=>setStatus(`ERROR: ${e.message||e}`)));
+$('btnApplyFilter').addEventListener('click',applyFilterAndRender);
+$('btnResetFilter').addEventListener('click',()=>{if(!state.allReadings.length)return;$('filterStart').value=dayStr(state.allReadings[0].ts);$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);applyFilterAndRender();});
+$('btnLoadLocal').addEventListener('click',()=>loadLocal().catch(e=>setStatus(`ERROR: ${e.message||e}`)));
+$('btnClearData').addEventListener('click',()=>{state.allReadings=[];state.filteredReadings=[];state.driveRowsByDate.clear();state.driveFilesByDate.clear();applyFilterAndRender();setStatus('Cache cleared');});
+$('btnBuildInvoice').addEventListener('click',buildInvoices); $('btnExportCsv').addEventListener('click',exportInvoices);
+$('btnLoadRepoMapping').addEventListener('click',()=>loadStdMapping()); $('btnLoadStdMap').addEventListener('click',()=>loadStdMapping());
+$('btnImportMapping').addEventListener('click',async()=>{const f=$('mappingFile').files?.[0];if(!f)return alert('Choose mapping CSV');importMappingRows(parseCsv(await f.text()));});
+$('btnSaveMapping').addEventListener('click',saveMapping); $('btnExportMapping').addEventListener('click',exportMapping);
+$('invoiceMonth').value=new Date().toISOString().slice(0,7); loadMapping(); loadStdMapping();
+</script>
+</body></html>
