@@ -1,264 +1,76 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CT79 Local Dashboard + Invoicing (HTML5 only)</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <style>
-    :root{--bg:#0b1220;--panel:#0f172a;--border:#1f2a44;--text:#e7eef9;--muted:#93a4bd;--acc:#00d0ff}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);margin:0}
-    .wrap{max-width:1200px;margin:0 auto;padding:16px}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
-    .field{display:flex;flex-direction:column;gap:6px}
-    input,button{background:#0b152b;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px 10px}
-    button{cursor:pointer}
-    button:hover{background:#12203d}
-    .muted{color:var(--muted);font-size:12px}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid #1a2440;text-align:left;font-size:13px}
-    .kpi{font-size:26px;font-weight:700}
-    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-    @media (max-width: 900px){.grid{grid-template-columns:1fr}}
-    #status{white-space:pre-wrap}
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <h2>⚡ CT79 Local Dashboard + Invoicing</h2>
-
-  <div class="card">
-    <div class="row">
-      <div class="field"><label>Google Drive folder ID</label><input id="folderId" value="1iENYO8hbW0BNgXUd4v_FEs9Ve5oyHOpv"/></div>
-      <div class="field"><label>API key (optional, for public/shared files)</label><input id="apiKey" placeholder="AIza..."/></div>
-      <div class="field"><label>OAuth token (optional, for private Drive)</label><input id="oauth" placeholder="ya29..."/></div>
-      <button id="btnLoadDrive">Load from Drive</button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <div class="field"><label>Or drop local readings_*.csv files</label><input id="localFiles" type="file" multiple accept=".csv"/></div>
-      <button id="btnLoadLocal">Load local files</button>
-    </div>
-    <p class="muted">This HTML5 file runs fully in-browser (no backend). It loads every <b>readings_*.csv</b> file, computes meter consumption from the monotonic <b>kwh_import</b> counter, and builds dashboard + invoices.</p>
-    <div id="status" class="muted"></div>
-  </div>
-
-  <div class="card">
-    <div class="grid">
-      <div><div class="muted">Readings rows</div><div id="kpiRows" class="kpi">0</div></div>
-      <div><div class="muted">Active meters</div><div id="kpiMeters" class="kpi">0</div></div>
-      <div><div class="muted">Total kWh (loaded period)</div><div id="kpiKwh" class="kpi">0.00</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Dashboard (daily kWh)</h3>
-    <canvas id="dailyChart" height="120"></canvas>
-  </div>
-
-  <div class="card">
-    <h3>Invoicing (monthly)</h3>
-    <div class="row" style="margin-bottom:10px">
-      <div class="field"><label>Month</label><input id="invoiceMonth" type="month"></div>
-      <div class="field"><label>€/kWh</label><input id="priceKwh" type="number" step="0.0001" value="0.20"></div>
-      <div class="field"><label>Capacity fee (€)</label><input id="capacityFee" type="number" step="0.01" value="0"></div>
-      <div class="field"><label>Admin fee (€)</label><input id="adminFee" type="number" step="0.01" value="0"></div>
-      <button id="btnBuildInvoice">Build invoice table</button>
-      <button id="btnExportCsv">Export CSV</button>
-    </div>
-    <table>
-      <thead><tr><th>Meter</th><th>Start kWh</th><th>End kWh</th><th>Energy kWh</th><th>Energy €</th><th>Total €</th></tr></thead>
-      <tbody id="invoiceBody"></tbody>
-    </table>
-  </div>
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CT79 Local Dashboard + Invoicing (HTML5)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0b1220;--panel:#0f172a;--border:#1f2a44;--text:#e7eef9;--muted:#93a4bd}body{font-family:system-ui;background:var(--bg);color:var(--text);margin:0}
+.wrap{max-width:1280px;margin:0 auto;padding:16px}.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px}input,button,select{background:#0b152b;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
+table{width:100%;border-collapse:collapse}th,td{padding:7px;border-bottom:1px solid #1a2440;text-align:left;font-size:12px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.kpi{font-size:22px;font-weight:700}
+.tabs{display:flex;gap:8px}.tab.active{outline:2px solid #365082}.view{display:none}.view.active{display:block}.chart-wrap{height:420px}.muted{font-size:12px;color:var(--muted)}
+</style></head><body><div class="wrap"><h2>⚡ CT79 Local (incremental + stacked hourly)</h2>
+<div class="card"><div class="row">
+<div class="field"><label>Drive folder</label><input id="folderId" value="1iENYO8hbW0BNgXUd4v_FEs9Ve5oyHOpv"/></div>
+<div class="field"><label>API key</label><input id="apiKey"/></div><div class="field"><label>OAuth token</label><input id="oauth"/></div>
+<div class="field"><label>Start day (UTC)</label><input id="filterStart" type="date"/></div><div class="field"><label>End day (UTC)</label><input id="filterEnd" type="date"/></div>
+<button id="btnLoadDrivePeriod">Load selected period from Drive</button><button id="btnApplyFilter">Apply filter</button><button id="btnResetFilter">Reset filter</button></div>
+<div class="row" style="margin-top:8px"><div class="field"><label>Local readings files</label><input id="localFiles" type="file" multiple accept=".csv"/></div>
+<button id="btnLoadLocal">Load local files</button><button id="btnClearData">Clear cache</button><button id="btnLoadStdMap">Load standard mapping</button></div>
+<div id="status" class="muted"></div></div>
+<div class="tabs"><button class="tab active" data-view="dashboard">Dashboard</button><button class="tab" data-view="invoicing">Invoicing</button><button class="tab" data-view="mappings">Mappings</button><button class="tab" data-view="readings">Readings</button></div>
+<section id="view-dashboard" class="view active"><div class="card"><div class="grid">
+<div><div class="muted">Rows (ok only)</div><div id="kpiRows" class="kpi">0</div></div><div><div class="muted">Meters >=0.5kWh</div><div id="kpiMeters" class="kpi">0</div></div><div><div class="muted">Total kWh</div><div id="kpiKwh" class="kpi">0</div></div><div><div class="muted">Hours</div><div id="kpiHours" class="kpi">0</div></div>
+</div></div>
+<div class="card"><h3>Hourly kWh (stacked by parking_slot)</h3><div class="chart-wrap"><canvas id="hourlyChart"></canvas></div><div id="chartWarning" class="muted"></div></div>
+<div class="card"><table><thead><tr><th>meter_id</th><th>meter_key(uid)</th><th>parking_slot</th><th>owner</th><th>kWh</th></tr></thead><tbody id="topMeters"></tbody></table></div></section>
+<section id="view-invoicing" class="view"><div class="card"><div class="row"><div class="field"><label>Month</label><input id="invoiceMonth" type="month"/></div><div class="field"><label>€/kWh</label><input id="priceKwh" type="number" step="0.0001" value="0.20"/></div><div class="field"><label>Capacity €</label><input id="capacityFee" type="number" step="0.01" value="0"/></div><div class="field"><label>Admin €</label><input id="adminFee" type="number" step="0.01" value="0"/></div><button id="btnBuildInvoice">Build</button><button id="btnExportCsv">Export CSV</button></div>
+<table><thead><tr><th>meter_id</th><th>uid/key</th><th>parking</th><th>owner</th><th>energy kWh</th><th>total €</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></section>
+<section id="view-mappings" class="view"><div class="card"><div class="row"><button id="btnLoadRepoMapping">Load data/local_standard_mapping.csv</button><div class="field"><label>Import mapping CSV</label><input id="mappingFile" type="file" accept=".csv"/></div><button id="btnImportMapping">Import</button><button id="btnSaveMapping">Save local</button><button id="btnExportMapping">Export</button></div>
+<table><thead><tr><th>meter_id</th><th>match_key(ip:port|unit)</th><th>slot_code</th><th>parking_slot</th><th>owner</th><th>status</th></tr></thead><tbody id="mappingBody"></tbody></table></div></section>
+<section id="view-readings" class="view"><div class="card"><table><thead><tr><th>ts</th><th>uid/key</th><th>match_key</th><th>kwh</th><th>ok</th></tr></thead><tbody id="readingsBody"></tbody></table></div></section>
 </div>
-
 <script>
-const state = { readings: [], byMeter: new Map(), chart: null, invoiceRows: [] };
-const $ = (id) => document.getElementById(id);
-
-function setStatus(msg) { $("status").textContent = msg; }
-function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter(Boolean);
-  if (!lines.length) return [];
-  const header = lines[0].split(",").map(s => s.trim());
-  return lines.slice(1).map(line => {
-    const cols = line.split(",");
-    const row = {};
-    header.forEach((h, i) => row[h] = (cols[i] ?? "").trim());
-    return row;
-  });
+const state={allReadings:[],filteredReadings:[],byMeter:new Map(),chart:null,invoiceRows:[],driveRowsByDate:new Map(),driveFilesByDate:new Map(),mappingByMatchKey:new Map(),meterIdByMeterKey:new Map(),meterMatchByMeterKey:new Map()};
+const $=id=>document.getElementById(id),MAP_KEY='ct79_map_v3',MIN_KWH=0.5;
+const STD_MAPPING_CSV=`id,gateway_id,gateway_ip,port,unit_id,slot_code,description,status\n1,1,192.168.1.101,502,1,P246,Nacho,Activo\n2,1,192.168.1.101,502,2,P154,Oscar,Activo\n3,1,192.168.1.101,502,3,P133,Asterio,Activo\n4,1,192.168.1.101,502,4,P205,a,Activo\n5,1,192.168.1.101,502,5,P131,José Maria,Activo\n6,1,192.168.1.101,502,6,P131,Valle,Activo\n7,4,192.168.1.104,502,24,P318,Arancha,Activo\n8,4,192.168.1.104,502,25,P361,Ben,Activo\n9,2,192.168.1.102,502,2,P302,Carlos,Activo\n97,1,192.168.1.101,502,7,P120,Angel,Activo\n98,1,192.168.1.101,502,8,P228,Marta,Activo\n99,1,192.168.1.101,502,9,P229,Jimena,Activo`;
+function setStatus(t){$('status').textContent=t} function esc(s){return String(s??'').replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]))}
+function parseCsv(text){let rows=[],row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(q){if(c==='"'&&n==='"'){cell+='"';i++;}else if(c==='"')q=false;else cell+=c;}else{if(c==='"')q=true;else if(c===','){row.push(cell);cell='';}else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}else if(c!=='\r')cell+=c;}}if(cell.length||row.length){row.push(cell);rows.push(row);}if(!rows.length)return[];const h=rows[0].map(x=>x.trim());return rows.slice(1).filter(r=>r.some(x=>x.trim())).map(r=>{const o={};h.forEach((k,i)=>o[k]=(r[i]??'').trim());return o;});}
+function dayStr(d){return d.toISOString().slice(0,10)} function hourStr(d){return d.toISOString().slice(0,13)+':00'} function yyyymmdd(s){return s.replaceAll('-','')}
+function enumDays(s,e){const out=[];let d=new Date(`${s}T00:00:00Z`),end=new Date(`${e}T00:00:00Z`);while(d<=end){out.push(dayStr(d));d.setUTCDate(d.getUTCDate()+1);}return out;}
+function normalizeRows(rows){return rows.map(r=>{const ts=new Date(r.timestamp_utc||r.ts_utc||'');const gw=(r.gateway||'').split(':')[0];const port=((r.gateway||'').split(':')[1]||'502').trim();const unit=String(r.unit||'');const uid=(r.device_uid||'').trim();const meterKey=uid?`uid:${uid}`:`${gw}:${port}|${unit}`;const matchKey=`${gw}:${port}|${unit}`;const ok=String(r.ok).toLowerCase()==='true';return {ts,tsStr:r.timestamp_utc||'',meterKey,uid,matchKey,gw,port,unit,kwh:Number(r.kwh_import),ok};}).filter(r=>!Number.isNaN(r.ts.getTime())&&Number.isFinite(r.kwh)&&r.ok);} // ignore not responding
+function indexByMeter(rows){const m=new Map();rows.forEach(r=>{if(!m.has(r.meterKey))m.set(r.meterKey,[]);m.get(r.meterKey).push(r);state.meterMatchByMeterKey.set(r.meterKey,r.matchKey);});m.forEach(a=>a.sort((x,y)=>x.ts-y.ts));return m;}
+function meterTotals(map){const t=new Map();map.forEach((arr,k)=>{let s=0;for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)s+=d;}t.set(k,s);});return t;}
+function resolveMeta(meterKey){const mk=state.meterMatchByMeterKey.get(meterKey)||meterKey;const m=state.mappingByMatchKey.get(mk)||{};return {meter_id:m.id||state.meterIdByMeterKey.get(meterKey)||'',parking_slot:m.slot_code||m.parking_slot||'UNMAPPED',owner:m.description||m.owner_name||'',status:m.status||'Activo',match_key:mk};}
+function ensureMeterIds(){const keys=[...new Set(state.allReadings.map(r=>r.meterKey))].sort();let used=new Set([...state.meterIdByMeterKey.values()]),next=1;for(const k of keys){if(!state.meterIdByMeterKey.has(k)){while(used.has(next))next++;state.meterIdByMeterKey.set(k,next);used.add(next);}}}
+function range(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)return null;return{start:new Date(`${s}T00:00:00Z`),end:new Date(`${e}T23:59:59Z`)}}
+function rebuildFromCache(){const all=[];for(const rows of state.driveRowsByDate.values())all.push(...rows);state.allReadings=all.sort((a,b)=>a.ts-b.ts);ensureMeterIds();if(state.allReadings.length){if(!$('filterStart').value)$('filterStart').value=dayStr(state.allReadings[0].ts);if(!$('filterEnd').value)$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);}applyFilterAndRender();renderMappingTable();}
+function applyFilterAndRender(){const rr=range();state.filteredReadings=rr?state.allReadings.filter(r=>r.ts>=rr.start&&r.ts<=rr.end):[...state.allReadings];state.byMeter=indexByMeter(state.filteredReadings);renderDashboard();renderReadings();renderTopMeters();}
+function renderDashboard(){const totals=meterTotals(state.byMeter);const validMeters=[...totals.entries()].filter(([,k])=>k>=MIN_KWH).map(([m])=>m);const byHourSlot=new Map();let total=0;validMeters.forEach(meter=>{const arr=state.byMeter.get(meter)||[];for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500){const h=hourStr(arr[i].ts),slot=resolveMeta(meter).parking_slot;const key=`${h}|${slot}`;byHourSlot.set(key,(byHourSlot.get(key)||0)+d);total+=d;}}});
+const hours=[...new Set([...byHourSlot.keys()].map(k=>k.split('|')[0]))].sort();const slots=[...new Set([...byHourSlot.keys()].map(k=>k.split('|')[1]))].sort();
+$('kpiRows').textContent=String(state.filteredReadings.length);$('kpiMeters').textContent=String(validMeters.length);$('kpiKwh').textContent=total.toFixed(3);$('kpiHours').textContent=String(hours.length);
+if(state.chart)state.chart.destroy();if(typeof Chart==='undefined'){ $('chartWarning').textContent='Chart.js not available';return;} $('chartWarning').textContent='';
+const datasets=slots.map((slot,idx)=>({label:slot,data:hours.map(h=>byHourSlot.get(`${h}|${slot}`)||0),backgroundColor:`hsl(${(idx*47)%360} 70% 55%)`,stack:'kwh'}));
+state.chart=new Chart($('hourlyChart'),{type:'bar',data:{labels:hours,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});
 }
-
-function meterKey(r) {
-  if (r.device_uid) return `uid:${r.device_uid}`;
-  return `${r.gateway || ""}|${r.unit || ""}`;
-}
-
-function normalizeRows(rows) {
-  return rows
-    .map(r => ({
-      ts: new Date(r.timestamp_utc || r.ts_utc || ""),
-      meter: meterKey(r),
-      gateway: r.gateway || "",
-      unit: r.unit || "",
-      kwh: Number(r.kwh_import),
-      ok: String(r.ok).toLowerCase() === "true"
-    }))
-    .filter(r => !isNaN(r.ts.getTime()) && Number.isFinite(r.kwh));
-}
-
-async function listDriveFiles() {
-  const folderId = $("folderId").value.trim();
-  const apiKey = $("apiKey").value.trim();
-  const oauth = $("oauth").value.trim();
-  if (!folderId) throw new Error("Folder ID required.");
-
-  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and name contains 'readings_'`);
-  const fields = encodeURIComponent("files(id,name,modifiedTime,size)");
-  let url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=1000&orderBy=name desc`;
-  if (apiKey) url += `&key=${encodeURIComponent(apiKey)}`;
-
-  const headers = oauth ? { Authorization: `Bearer ${oauth}` } : {};
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`Drive list error ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return (data.files || []).filter(f => /^readings_\d{8}.*\.csv$/i.test(f.name));
-}
-
-async function downloadDriveCsv(file) {
-  const apiKey = $("apiKey").value.trim();
-  const oauth = $("oauth").value.trim();
-  let url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`;
-  if (apiKey) url += `&key=${encodeURIComponent(apiKey)}`;
-  const headers = oauth ? { Authorization: `Bearer ${oauth}` } : {};
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`Download failed ${file.name}: ${res.status}`);
-  return await res.text();
-}
-
-function buildDerived() {
-  state.byMeter = new Map();
-  for (const r of state.readings) {
-    if (!state.byMeter.has(r.meter)) state.byMeter.set(r.meter, []);
-    state.byMeter.get(r.meter).push(r);
-  }
-  for (const arr of state.byMeter.values()) arr.sort((a,b) => a.ts - b.ts);
-
-  let totalKwh = 0;
-  const byDay = new Map();
-  for (const arr of state.byMeter.values()) {
-    for (let i=1; i<arr.length; i++) {
-      const delta = arr[i].kwh - arr[i-1].kwh;
-      if (delta > 0 && delta < 500) {
-        totalKwh += delta;
-        const day = arr[i].ts.toISOString().slice(0,10);
-        byDay.set(day, (byDay.get(day) || 0) + delta);
-      }
-    }
-  }
-
-  $("kpiRows").textContent = String(state.readings.length);
-  $("kpiMeters").textContent = String(state.byMeter.size);
-  $("kpiKwh").textContent = totalKwh.toFixed(2);
-
-  const labels = [...byDay.keys()].sort();
-  const vals = labels.map(d => byDay.get(d));
-  if (state.chart) state.chart.destroy();
-  state.chart = new Chart($("dailyChart"), {
-    type: "bar",
-    data: { labels, datasets: [{ label: "kWh/day", data: vals }] },
-    options: { responsive: true, maintainAspectRatio: false }
-  });
-}
-
-function monthRange(yyyyMm) {
-  const [y,m] = yyyyMm.split("-").map(Number);
-  const start = new Date(Date.UTC(y, m-1, 1));
-  const end = new Date(Date.UTC(y, m, 1));
-  return { start, end };
-}
-
-function buildInvoices() {
-  const month = $("invoiceMonth").value;
-  if (!month) return alert("Select invoice month.");
-  const { start, end } = monthRange(month);
-  const price = Number($("priceKwh").value || 0);
-  const cap = Number($("capacityFee").value || 0);
-  const admin = Number($("adminFee").value || 0);
-
-  const rows = [];
-  for (const [meter, arr] of state.byMeter.entries()) {
-    const monthRows = arr.filter(r => r.ts >= start && r.ts < end);
-    if (!monthRows.length) continue;
-    const startKwh = monthRows[0].kwh;
-    const endKwh = monthRows[monthRows.length - 1].kwh;
-    const energy = Math.max(0, endKwh - startKwh);
-    const energyEur = energy * price;
-    const total = energyEur + cap + admin;
-    rows.push({ meter, startKwh, endKwh, energy, energyEur, total });
-  }
-
-  state.invoiceRows = rows.sort((a,b)=>a.meter.localeCompare(b.meter));
-  const tbody = $("invoiceBody");
-  tbody.innerHTML = "";
-  for (const r of state.invoiceRows) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.meter}</td><td>${r.startKwh.toFixed(2)}</td><td>${r.endKwh.toFixed(2)}</td><td>${r.energy.toFixed(2)}</td><td>${r.energyEur.toFixed(2)}</td><td>${r.total.toFixed(2)}</td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-function exportInvoiceCsv() {
-  if (!state.invoiceRows.length) return alert("Build invoices first.");
-  const header = ["meter","start_kwh","end_kwh","energy_kwh","energy_eur","total_eur"];
-  const lines = [header.join(",")].concat(state.invoiceRows.map(r => [
-    r.meter, r.startKwh.toFixed(3), r.endKwh.toFixed(3), r.energy.toFixed(3), r.energyEur.toFixed(2), r.total.toFixed(2)
-  ].join(",")));
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `invoices_${$("invoiceMonth").value || "month"}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-$("btnLoadDrive").addEventListener("click", async () => {
-  try {
-    setStatus("Listing readings files in Drive...");
-    const files = await listDriveFiles();
-    setStatus(`Found ${files.length} files. Downloading...`);
-    const all = [];
-    for (const f of files) {
-      setStatus(`Downloading ${f.name} ...`);
-      const txt = await downloadDriveCsv(f);
-      all.push(...normalizeRows(parseCsv(txt)));
-    }
-    state.readings = all.sort((a,b)=>a.ts-b.ts);
-    buildDerived();
-    setStatus(`Loaded ${state.readings.length} rows from ${files.length} Drive files.`);
-  } catch (e) {
-    setStatus(`ERROR: ${e.message || String(e)}\nTip: if the folder is private, provide OAuth token.`);
-  }
-});
-
-$("btnLoadLocal").addEventListener("click", async () => {
-  const files = [...($("localFiles").files || [])].filter(f => /^readings_\d{8}.*\.csv$/i.test(f.name));
-  if (!files.length) return alert("Select readings_*.csv files.");
-  setStatus(`Reading ${files.length} local CSV files...`);
-  const all = [];
-  for (const f of files) {
-    const txt = await f.text();
-    all.push(...normalizeRows(parseCsv(txt)));
-  }
-  state.readings = all.sort((a,b)=>a.ts-b.ts);
-  buildDerived();
-  setStatus(`Loaded ${state.readings.length} rows from local files.`);
-});
-
-$("btnBuildInvoice").addEventListener("click", buildInvoices);
-$("btnExportCsv").addEventListener("click", exportInvoiceCsv);
-$("invoiceMonth").value = new Date().toISOString().slice(0,7);
-</script>
-</body>
-</html>
+function renderTopMeters(){const totals=meterTotals(state.byMeter);const rows=[...totals.entries()].filter(([,k])=>k>=MIN_KWH).map(([m,k])=>({meterKey:m,kwh:k,...resolveMeta(m)})).sort((a,b)=>b.kwh-a.kwh);$('topMeters').innerHTML=rows.length?rows.map(r=>`<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${esc(r.owner)}</td><td>${r.kwh.toFixed(3)}</td></tr>`).join(''):`<tr><td colspan='5' class='muted'>No data</td></tr>`;}
+function renderReadings(){const rows=[...state.filteredReadings].sort((a,b)=>b.ts-a.ts).slice(0,500);$('readingsBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${r.kwh.toFixed(3)}</td><td>${r.ok}</td></tr>`).join(''):`<tr><td colspan='5' class='muted'>No data</td></tr>`;}
+function buildInvoices(){const m=$('invoiceMonth').value;if(!m)return alert('Select month');const [y,mo]=m.split('-').map(Number),s=new Date(Date.UTC(y,mo-1,1)),e=new Date(Date.UTC(y,mo,1));const p=Number($('priceKwh').value||0),c=Number($('capacityFee').value||0),a=Number($('adminFee').value||0);const by=indexByMeter(state.allReadings.filter(r=>r.ts>=s&&r.ts<e));const totals=meterTotals(by);const rows=[];by.forEach((arr,key)=>{const k=totals.get(key)||0;if(k<MIN_KWH)return;const totalE=k*p+c+a;rows.push({meterKey:key,energy:k,totalE,...resolveMeta(key)});});state.invoiceRows=rows.sort((x,y)=>x.meter_id-y.meter_id);$('invoiceBody').innerHTML=state.invoiceRows.length?state.invoiceRows.map(r=>`<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${esc(r.owner)}</td><td>${r.energy.toFixed(3)}</td><td>${r.totalE.toFixed(2)}</td></tr>`).join(''):`<tr><td colspan='6' class='muted'>No rows</td></tr>`;}
+function exportInvoices(){if(!state.invoiceRows.length)return alert('Build first');const lines=['meter_id,meter_key,parking_slot,owner_name,energy_kwh,total_eur',...state.invoiceRows.map(r=>`${r.meter_id},"${r.meterKey}","${r.parking_slot}","${r.owner}",${r.energy.toFixed(3)},${r.totalE.toFixed(2)}`)];download('invoices.csv',lines.join('\n'));}
+function download(name,text){const b=new Blob([text],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href)}
+async function driveReq(url){const t=$('oauth').value.trim(),h=t?{Authorization:`Bearer ${t}`}:{},r=await fetch(url,{headers:h});if(!r.ok)throw new Error(`${r.status} ${await r.text()}`);return r;}
+async function findFilesForDay(d){if(state.driveFilesByDate.has(d))return state.driveFilesByDate.get(d);const folder=$('folderId').value.trim(),api=$('apiKey').value.trim(),tag=`readings_${yyyymmdd(d)}`;let url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folder}' in parents and trashed=false and name contains '${tag}'`)}&fields=files(id,name)&pageSize=100`;if(api)url+=`&key=${encodeURIComponent(api)}`;const files=(await (await driveReq(url)).json()).files||[];state.driveFilesByDate.set(d,files.filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name)));return state.driveFilesByDate.get(d);}
+async function dlFile(file){const api=$('apiKey').value.trim();let url=`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`;if(api)url+=`&key=${encodeURIComponent(api)}`;return await (await driveReq(url)).text();}
+async function loadPeriod(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)throw new Error('select start/end');if(s>e)throw new Error('start>end');const days=enumDays(s,e),missing=days.filter(d=>!state.driveRowsByDate.has(d));if(!missing.length){setStatus(`No missing files for ${s}..${e}. Using memory cache.`);applyFilterAndRender();return;}setStatus(`Missing days ${missing.length}/${days.length}. Querying Drive...`);for(const d of missing){const files=await findFilesForDay(d);let rows=[];for(const f of files){rows.push(...normalizeRows(parseCsv(await dlFile(f))));}state.driveRowsByDate.set(d,rows);}rebuildFromCache();setStatus(`Loaded ${s}..${e}. Cached days: ${state.driveRowsByDate.size}.`);}
+async function loadLocal(){const fs=[...($('localFiles').files||[])].filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name));if(!fs.length)return alert('Select files');for(const f of fs){const rows=normalizeRows(parseCsv(await f.text()));if(!rows.length)continue;const d=dayStr(rows[0].ts);state.driveRowsByDate.set(d,(state.driveRowsByDate.get(d)||[]).concat(rows));}rebuildFromCache();setStatus(`Loaded ${fs.length} local files.`);}
+function importMappingRows(rows){rows.forEach(r=>{const id=Number(r.id||0),ip=(r.gateway_ip||r.gateway_host||r.gateway||'').split(':')[0],port=String(r.port||r.gateway_port||'502'),u=String(r.unit_id||r.unit||''),match=`${ip}:${port}|${u}`;const rec={id,slot_code:r.slot_code||'',description:r.description||r.owner_name||'',status:r.status||'Activo',parking_slot:r.slot_code||''};state.mappingByMatchKey.set(match,rec);});renderMappingTable();renderTopMeters();}
+function renderMappingTable(){const keys=[...state.mappingByMatchKey.keys()].sort();$('mappingBody').innerHTML=keys.length?keys.map(k=>{const m=state.mappingByMatchKey.get(k)||{};return `<tr data-key="${esc(k)}"><td>${m.id||''}</td><td>${esc(k)}</td><td><input data-k="slot_code" value="${esc(m.slot_code||'')}"></td><td><input data-k="parking_slot" value="${esc(m.parking_slot||'')}"></td><td><input data-k="description" value="${esc(m.description||'')}"></td><td><select data-k="status"><option ${m.status==='Activo'?'selected':''}>Activo</option><option ${m.status==='Inactivo'?'selected':''}>Inactivo</option></select></td></tr>`;}).join(''):`<tr><td colspan='6' class='muted'>No mappings</td></tr>`;$('mappingBody').querySelectorAll('tr[data-key]').forEach(tr=>{const k=tr.getAttribute('data-key');tr.querySelectorAll('input,select').forEach(inp=>inp.addEventListener('change',()=>{const f=inp.getAttribute('data-k');const cur=state.mappingByMatchKey.get(k)||{};cur[f]=inp.value;state.mappingByMatchKey.set(k,cur);}));});}
+function saveMapping(){localStorage.setItem(MAP_KEY,JSON.stringify(Object.fromEntries(state.mappingByMatchKey.entries())));setStatus('Mapping saved locally.');}
+function loadMapping(){try{const raw=localStorage.getItem(MAP_KEY);if(raw)state.mappingByMatchKey=new Map(Object.entries(JSON.parse(raw)));}catch(_){}}
+function exportMapping(){const lines=['id,match_key,slot_code,parking_slot,description,status'];for(const [k,m] of state.mappingByMatchKey.entries())lines.push([m.id||'',`"${k}"`,`"${m.slot_code||''}"`,`"${m.parking_slot||''}"`,`"${m.description||''}"`,`"${m.status||''}"`].join(','));download('local_mapping.csv',lines.join('\n'));}
+async function loadStdMapping(){try{const txt=await (await fetch('../data/local_standard_mapping.csv')).text();importMappingRows(parseCsv(txt));setStatus('Loaded standard mapping file.');}catch{importMappingRows(parseCsv(STD_MAPPING_CSV));setStatus('Loaded embedded standard mapping.');}}
+function switchView(v){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.view===v));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${v}`));}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
+$('btnLoadDrivePeriod').addEventListener('click',()=>loadPeriod().catch(e=>setStatus(`ERROR: ${e.message||e}`)));$('btnApplyFilter').addEventListener('click',applyFilterAndRender);$('btnResetFilter').addEventListener('click',()=>{if(!state.allReadings.length)return;$('filterStart').value=dayStr(state.allReadings[0].ts);$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);applyFilterAndRender();});$('btnLoadLocal').addEventListener('click',()=>loadLocal().catch(e=>setStatus(`ERROR: ${e.message||e}`)));$('btnClearData').addEventListener('click',()=>{state.allReadings=[];state.filteredReadings=[];state.driveRowsByDate.clear();state.driveFilesByDate.clear();applyFilterAndRender();setStatus('Cache cleared');});$('btnBuildInvoice').addEventListener('click',buildInvoices);$('btnExportCsv').addEventListener('click',exportInvoices);
+$('btnLoadRepoMapping').addEventListener('click',loadStdMapping);$('btnLoadStdMap').addEventListener('click',loadStdMapping);$('btnImportMapping').addEventListener('click',async()=>{const f=$('mappingFile').files?.[0];if(!f)return alert('Choose mapping CSV');importMappingRows(parseCsv(await f.text()));});$('btnSaveMapping').addEventListener('click',saveMapping);$('btnExportMapping').addEventListener('click',exportMapping);
+$('invoiceMonth').value=new Date().toISOString().slice(0,7);loadMapping();loadStdMapping();
+</script></body></html>
