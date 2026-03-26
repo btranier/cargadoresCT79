@@ -90,3 +90,27 @@ También disponible como `make`:
 ```bash
 make import-readings CSV=readings_20260201.csv
 ```
+
+## Versión local HTML5 (sin backend)
+
+Se añadió una versión 100% cliente en:
+
+- `frontend/local.html`
+
+### Funcionalidad local
+
+- Carga de **todos** los `readings_yyyymmdd*.csv` desde Google Drive (o desde archivos locales).
+- Dashboard local con métricas, gráfico diario y **filtro por rango de días** después de cargar las lecturas.
+- Facturación mensual local por medidor (sin backend), exportable a CSV.
+- Gestión local de mapeos `meter_id` ↔ parking/propietario/slot (editable y persistido en `localStorage`).
+- Importación de mapeos desde `data/active_mapping.csv` (si se sirve por HTTP) o mediante subida manual de CSV.
+
+### Uso rápido
+
+1. Abre `frontend/local.html` en navegador (recomendado servirlo con `python3 -m http.server`).
+2. Pulsa **Load all readings from Drive** o selecciona CSV locales.
+3. Ajusta el rango en **From day / To day** y pulsa **Apply day filter** para el dashboard.
+4. En **Mappings**, importa/edita la relación parking-slot por medidor y guarda localmente.
+5. En **Invoicing**, selecciona mes y tarifas, y genera/exporta facturas.
+
+> Nota: el acceso automático a Drive puede requerir API key u OAuth token según permisos de la carpeta.
