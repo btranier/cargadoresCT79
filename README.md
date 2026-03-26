@@ -97,19 +97,20 @@ Se añadió una versión 100% cliente en:
 
 - `frontend/local.html`
 
-### Qué hace
+### Funcionalidad local
 
-- Carga automáticamente archivos `readings_yyyymmdd*.csv` desde una carpeta de Google Drive.
-- También permite cargar los CSV localmente (arrastrar/seleccionar ficheros).
-- Calcula un dashboard local (kWh por día + KPIs).
-- Genera tabla de facturación mensual por medidor y exporta CSV.
+- Carga de **todos** los `readings_yyyymmdd*.csv` desde Google Drive (o desde archivos locales).
+- Dashboard local con métricas, gráfico diario y **filtro por rango de días** después de cargar las lecturas.
+- Facturación mensual local por medidor (sin backend), exportable a CSV.
+- Gestión local de mapeos `meter_id` ↔ parking/propietario/slot (editable y persistido en `localStorage`).
+- Importación de mapeos desde `data/active_mapping.csv` (si se sirve por HTTP) o mediante subida manual de CSV.
 
 ### Uso rápido
 
-1. Abre `frontend/local.html` en tu navegador.
-2. Si la carpeta Drive es pública/compartida con enlace, pega `API key` de Google Cloud (Drive API habilitada).
-3. Si la carpeta es privada, pega un `OAuth token` válido en el campo correspondiente.
-4. Pulsa **Load from Drive**.
-5. En **Invoicing**, elige mes y tarifas, luego **Build invoice table**.
+1. Abre `frontend/local.html` en navegador (recomendado servirlo con `python3 -m http.server`).
+2. Pulsa **Load all readings from Drive** o selecciona CSV locales.
+3. Ajusta el rango en **From day / To day** y pulsa **Apply day filter** para el dashboard.
+4. En **Mappings**, importa/edita la relación parking-slot por medidor y guarda localmente.
+5. En **Invoicing**, selecciona mes y tarifas, y genera/exporta facturas.
 
-> Nota: por políticas de Google, una URL de carpeta de Drive no siempre es suficiente para acceso automático sin API key u OAuth token.
+> Nota: el acceso automático a Drive puede requerir API key u OAuth token según permisos de la carpeta.
