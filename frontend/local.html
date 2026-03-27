@@ -60,7 +60,7 @@ table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:7px;b
 
 <section id="view-readings" class="view"><div class="card"><div class="table-wrap"><table><thead><tr><th>ts</th><th data-i18n="meter_uid">uid/key</th><th data-i18n="match_key">match_key</th><th>volt_v</th><th>current_a</th><th>power_kw</th><th>kwh_import</th><th>ok</th></tr></thead><tbody id="readingsBody"></tbody></table></div><button id="btnMoreReadings" style="margin-top:8px" data-i18n="show_more">Show more</button></div></section>
 
-<section id="view-validation" class="view"><div class="card"><h3 data-i18n="validation_header">Warnings / Validation checks</h3><div id="validationBody"></div></div></section>
+<section id="view-validation" class="view"><div class="card"><h3 data-i18n="validation_header">Warnings / Validation checks</h3><div class="table-wrap"><table><thead><tr><th>meter_id</th><th>ip</th><th>parking_slot</th><th>description</th><th>from</th><th>to</th><th>gap_min</th></tr></thead><tbody id="validationBody"></tbody></table></div></div></section>
 
 </div>
 <script>
@@ -74,7 +74,7 @@ const dayStr=d=>d.toISOString().slice(0,10),hourStr=d=>d.toISOString().slice(0,1
 function parseCsv(text){let rows=[],row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(q){if(c==='"'&&n==='"'){cell+='"';i++;}else if(c==='"')q=false;else cell+=c;}else{if(c==='"')q=true;else if(c===','){row.push(cell);cell='';}else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}else if(c!=='\r')cell+=c;}}if(cell||row.length){row.push(cell);rows.push(row);}if(!rows.length)return[];const h=rows[0].map(x=>x.trim());return rows.slice(1).filter(r=>r.some(x=>x.trim())).map(r=>{const o={};h.forEach((k,i)=>o[k]=(r[i]??'').trim());return o;});}
 function enumDays(s,e){const out=[];let d=new Date(`${s}T00:00:00Z`),end=new Date(`${e}T00:00:00Z`);while(d<=end){out.push(dayStr(d));d.setUTCDate(d.getUTCDate()+1);}return out;}
 function parseGateway(g){const [ip,port='502']=String(g||'').split(':');return {ip:(ip||'').trim(),port:String(port).trim()};}
-function normalizeRows(rows){return rows.map(r=>{const ts=new Date(r.timestamp_utc||r.ts_utc||''),{ip,port}=parseGateway(r.gateway),unit=String(r.unit||''),uid=(r.device_uid||'').trim(),meterKey=uid?`uid:${uid}`:`${ip}:${port}|${unit}`;return {ts,tsStr:r.timestamp_utc||'',meterKey,matchKey:`${ip}:${port}|${unit}`,kwh:Number(r.kwh_import),ok:String(r.ok).toLowerCase()==='true',volt_v:Number(r.volt_v),current_a:Number(r.current_a),power_kw:Number(r.power_kw)};}).filter(r=>!Number.isNaN(r.ts.getTime())&&Number.isFinite(r.kwh)&&r.ok);} // ignore ok=false
+function normalizeRows(rows){return rows.map(r=>{const ts=new Date(r.timestamp_utc||r.ts_utc||''),{ip,port}=parseGateway(r.gateway),unit=String(r.unit||''),uid=(r.device_uid||'').trim(),meterKey=uid?`uid:${uid}`:`${ip}:${port}|${unit}`;return {ts,tsStr:r.timestamp_utc||'',meterKey,matchKey:`${ip}:${port}|${unit}`,kwh:Number(r.kwh_import),ok:String(r.ok).toLowerCase()==='true',volt_v:Number(r.volt_v),current_a:Number(r.current_a),power_kw:Number(r.power_kw)};}).filter(r=>!Number.isNaN(r.ts.getTime())&&Number.isFinite(r.kwh)&&r.ok&&r.kwh>0);} // ignore ok=false and kwh_import=0
 function indexByMeter(rows){const m=new Map();rows.forEach(r=>{if(!m.has(r.meterKey))m.set(r.meterKey,[]);m.get(r.meterKey).push(r);state.meterMatchByMeterKey.set(r.meterKey,r.matchKey);});m.forEach(a=>a.sort((x,y)=>x.ts-y.ts));return m;}
 function ensureMeterIds(){const keys=[...new Set(state.allReadings.map(r=>r.meterKey))].sort();let used=new Set([...state.meterIdByMeterKey.values()]),next=1;for(const k of keys){if(!state.meterIdByMeterKey.has(k)){while(used.has(next))next++;state.meterIdByMeterKey.set(k,next);used.add(next);}}}
 function range(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)return null;return{start:new Date(`${s}T00:00:00Z`),end:new Date(`${e}T23:59:59Z`)}}
@@ -89,28 +89,29 @@ function computeConsumption(map){state.hourSlotReadings=new Map();const res={met
 function maxPower15m(rows){const b=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const t=new Date(r.ts);t.setUTCMinutes(Math.floor(t.getUTCMinutes()/15)*15,0,0);const k=t.toISOString();b.set(k,(b.get(k)||0)+r.power_kw);});let m=0;b.forEach(v=>{if(v>m)m=v;});return m;}
 function dailyBySlot(map,slot){const out={};map.forEach((arr,m)=>{if(resolveMeta(m).parking_slot!==slot)return;const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,out);} });return out;}
 function validationChecks(){
-  const c=computeConsumption(state.byMeter),warnings=[];
-  const unmapped=[...c.meter.keys()].filter(k=>resolveMeta(k).parking_slot==='UNMAPPED');
-  if(unmapped.length)warnings.push({level:'danger',msg:`${unmapped.length} active unmapped meter(s): ${unmapped.join(', ')}`});
-  const mapped=[...c.meter.keys()].filter(k=>resolveMeta(k).parking_slot!=='UNMAPPED');
-  mapped.forEach(k=>{
-    const p=c.meter.get(k),meta=resolveMeta(k),ip=(meta.match_key||'').split(':')[0];
-    const missing=['P1','P2','P3','P4','P5','P6'].filter(x=>p[x]===0);
-    if(missing.length)warnings.push({level:'warn',msg:`meter_id=${meta.meter_id} ip=${ip} missing tariff periods: ${missing.join(', ')}`});
-    if(Math.abs(p.total-p.firstLastDelta)>0.05)warnings.push({level:'warn',msg:`meter_id=${meta.meter_id} ip=${ip} delta mismatch ${fmt(p.total-p.firstLastDelta)} kWh`});
-  });
-  const resets=[],gaps=[];
+  const rows=[];
   state.byMeter.forEach((arr,k)=>{
     const meta=resolveMeta(k),ip=(meta.match_key||'').split(':')[0];
     for(let i=1;i<arr.length;i++){
-      if(arr[i].kwh<arr[i-1].kwh) resets.push(`meter_id=${meta.meter_id} ip=${ip}`);
       const mins=(arr[i].ts-arr[i-1].ts)/60000;
-      if(mins>20) gaps.push(`meter_id=${meta.meter_id} ip=${ip} gap ${arr[i-1].ts.toISOString()} -> ${arr[i].ts.toISOString()} (${fmt(mins)} min)`);
+      if(mins>20){
+        rows.push({
+          meter_id: meta.meter_id || '',
+          ip,
+          parking_slot: meta.parking_slot || 'UNMAPPED',
+          description: meta.owner || '',
+          from: arr[i-1].ts.toISOString(),
+          to: arr[i].ts.toISOString(),
+          gap_min: mins
+        });
+      }
     }
   });
-  if(resets.length)warnings.push({level:'warn',msg:`Negative/reset counter detected: ${[...new Set(resets)].join(' ; ')}`});
-  if(gaps.length)warnings.push({level:'warn',msg:`Missing interval(s): ${gaps.slice(0,50).join(' ; ')}`});
-  $('validationBody').innerHTML=warnings.length?`<ul>${warnings.map(w=>`<li class='${w.level}'>${esc(w.msg)}</li>`).join('')}</ul>`:`<div class='ok'>✓ No warnings detected.</div>`;
+  rows.sort((a,b)=>a.from.localeCompare(b.from));
+  const body=$('validationBody');
+  body.innerHTML=rows.length
+    ? rows.map(r=>`<tr class='warn'><td>${esc(r.meter_id)}</td><td>${esc(r.ip)}</td><td>${esc(r.parking_slot)}</td><td>${esc(r.description)}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${fmt(r.gap_min)}</td></tr>`).join('')
+    : `<tr><td colspan='7' class='ok'>✓ No missing intervals detected.</td></tr>`;
 }
 function rebuildFromCache(){const all=[];for(const rows of state.driveRowsByDate.values())all.push(...rows);state.allReadings=all.sort((a,b)=>a.ts-b.ts);ensureMeterIds();if(state.allReadings.length){if(!$('filterStart').value)$('filterStart').value=dayStr(state.allReadings[0].ts);if(!$('filterEnd').value)$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);}applyFilterAndRender();renderMappingTable();}
 function applyFilterAndRender(){const r=range();state.filteredReadings=r?state.allReadings.filter(x=>x.ts>=r.start&&x.ts<=r.end):[...state.allReadings];state.byMeter=indexByMeter(state.filteredReadings);renderDashboard();renderSummary();renderReadings();renderInvoiceDailyDetails();validationChecks();}
