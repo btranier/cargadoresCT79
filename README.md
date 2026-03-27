@@ -105,7 +105,9 @@ Se añadió una versión 100% cliente en:
 - Gestión local de mapeos `meter_id` ↔ parking/propietario/slot (editable y persistido en `localStorage`).
 - Importación de mapeos desde `data/local_standard_mapping.csv` (mapping estándar) o mediante subida manual de CSV.
 - Ignora lecturas no válidas (`ok=false`) y descarta medidores con consumo total < 0.5 kWh en el periodo (dashboard/invoicing).
-- Gráfico horario de kWh apilado por `parking_slot`.
+- Gráfico horario de kWh apilado por `parking_slot`, KPI de capacidad máxima y validación de medidores activos no mapeados.
+- Tabla resumen e invoicing con desglose P1..P6, validación de delta (primera/última lectura) y formato a 2 decimales.
+- UI bilingüe (ES/EN) y pestaña de lecturas con `volt_v`, `current_a`, `power_kw`, `kwh_import` y paginación por bloques de 1000 filas.
 
 ### Uso rápido
 
