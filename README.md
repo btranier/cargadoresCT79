@@ -108,6 +108,9 @@ Se añadió una versión 100% cliente en:
 - Gráfico horario de kWh apilado por `parking_slot`, KPI de capacidad máxima y validación de medidores activos no mapeados.
 - Tabla resumen e invoicing con desglose P1..P6, validación de delta (primera/última lectura) y formato a 2 decimales.
 - UI bilingüe (ES/EN) y pestaña de lecturas con `volt_v`, `current_a`, `power_kw`, `kwh_import` y paginación por bloques de 1000 filas.
+- Panel de validaciones dedicado (medidores activos no mapeados, periodos faltantes por medidor mapeado, deltas inconsistentes y reseteos de contador).
+- Clic en una barra del gráfico para ver lecturas subyacentes del bloque seleccionado.
+
 
 ### Uso rápido
 
