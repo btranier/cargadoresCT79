@@ -90,3 +90,31 @@ También disponible como `make`:
 ```bash
 make import-readings CSV=readings_20260201.csv
 ```
+
+## Versión local HTML5 (sin backend)
+
+Se añadió una versión 100% cliente en:
+
+- `frontend/local.html`
+
+### Funcionalidad local
+
+- Carga incremental por período desde Google Drive: solo consulta/descarga los días seleccionados y conserva en memoria los días ya cargados.
+- Dashboard local con métricas, gráfico **horario apilado por parking_slot** y filtro por rango de días después de cargar las lecturas.
+- Facturación mensual local por medidor (sin backend), exportable a CSV.
+- Gestión local de mapeos `meter_id` ↔ parking/propietario/slot (editable y persistido en `localStorage`).
+- Importación de mapeos desde `data/local_standard_mapping.csv` (mapping estándar) o mediante subida manual de CSV.
+- Ignora lecturas no válidas (`ok=false`) y descarta medidores con consumo total < 0.5 kWh en el periodo (dashboard/invoicing).
+- Gráfico horario de kWh apilado por `parking_slot`, KPI de capacidad máxima y validación de medidores activos no mapeados.
+- Tabla resumen e invoicing con desglose P1..P6, validación de delta (primera/última lectura) y formato a 2 decimales.
+- UI bilingüe (ES/EN) y pestaña de lecturas con `volt_v`, `current_a`, `power_kw`, `kwh_import` y paginación por bloques de 1000 filas.
+
+### Uso rápido
+
+1. Abre `frontend/local.html` en navegador (recomendado servirlo con `python3 -m http.server`).
+2. Selecciona periodo (`start`/`end`) y pulsa **Load selected period from Drive**. Si cambias periodo, solo se consultan días faltantes.
+3. Ajusta el rango en **From day / To day** y pulsa **Apply day filter** para el dashboard.
+4. En **Mappings**, importa/edita la relación parking-slot por medidor y guarda localmente.
+5. En **Invoicing**, selecciona mes y tarifas, y genera/exporta facturas.
+
+> Nota: el acceso automático a Drive puede requerir API key u OAuth token según permisos de la carpeta.
