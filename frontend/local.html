@@ -106,10 +106,10 @@ function range(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e
 function resolveMeta(meterKey){const mk=state.meterMatchByMeterKey.get(meterKey)||meterKey,m=state.mappingByMatchKey.get(mk)||{};return {meter_id:m.id||state.meterIdByMeterKey.get(meterKey)||'',parking_slot:m.slot_code||'UNMAPPED',owner:m.description||'',match_key:mk};}
 function periodPrices(){return {P1:Number($('priceP1').value||0),P2:Number($('priceP2').value||0),P3:Number($('priceP3').value||0),P4:Number($('priceP4').value||0),P5:Number($('priceP5').value||0),P6:Number($('priceP6').value||0)};}
 function periodExcess(){return {P1:Number($('excessP1').value||0),P2:Number($('excessP2').value||0),P3:Number($('excessP3').value||0),P4:Number($('excessP4').value||0),P5:Number($('excessP5').value||0),P6:Number($('excessP6').value||0)};}
-function effectivePeriodPrices(totalPeriods){
+function effectivePeriodPrices(totalPeriods,writeHint=true){
   const base=periodPrices(),excess=periodExcess(),out={};
   ['P1','P2','P3','P4','P5','P6'].forEach(p=>{const contrib=(totalPeriods[p]||0)>0?(excess[p]||0)/totalPeriods[p]:0;out[p]=(base[p]||0)+contrib;});
-  $('invoicePriceHint').textContent=`P1 ${fmt(base.P1)}+${fmt((out.P1-base.P1))}=${fmt(out.P1)} €/kWh | P2 ${fmt(base.P2)}+${fmt((out.P2-base.P2))}=${fmt(out.P2)} €/kWh | P3 ${fmt(base.P3)}+${fmt((out.P3-base.P3))}=${fmt(out.P3)} €/kWh | P4 ${fmt(base.P4)}+${fmt((out.P4-base.P4))}=${fmt(out.P4)} €/kWh | P5 ${fmt(base.P5)}+${fmt((out.P5-base.P5))}=${fmt(out.P5)} €/kWh | P6 ${fmt(base.P6)}+${fmt((out.P6-base.P6))}=${fmt(out.P6)} €/kWh`;
+  if(writeHint) $('invoicePriceHint').textContent=`P1 ${fmt(base.P1)}+${fmt((out.P1-base.P1))}=${fmt(out.P1)} €/kWh | P2 ${fmt(base.P2)}+${fmt((out.P2-base.P2))}=${fmt(out.P2)} €/kWh | P3 ${fmt(base.P3)}+${fmt((out.P3-base.P3))}=${fmt(out.P3)} €/kWh | P4 ${fmt(base.P4)}+${fmt((out.P4-base.P4))}=${fmt(out.P4)} €/kWh | P5 ${fmt(base.P5)}+${fmt((out.P5-base.P5))}=${fmt(out.P5)} €/kWh | P6 ${fmt(base.P6)}+${fmt((out.P6-base.P6))}=${fmt(out.P6)} €/kWh`;
   return out;
 }
 function easterSunday(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(Date.UTC(y,mo-1,da));}
@@ -252,22 +252,27 @@ function renderInvoiceDailyDetails(){
 function exportInvoices(){if(!state.invoiceRows.length)return alert('Calculate invoice first');const lines=['meter_id,meter_key,parking_slot,P1,P2,P3,P4,P5,P6,total_kwh,energy_eur,capacity_eur,admin_eur,total_eur',...state.invoiceRows.map(r=>`${r.meter_id},"${r.meterKey}","${r.parking_slot}",${fmt(r.P1)},${fmt(r.P2)},${fmt(r.P3)},${fmt(r.P4)},${fmt(r.P5)},${fmt(r.P6)},${fmt(r.total)},${fmt(r.energyE)},${fmt(r.capacityE)},${fmt(r.adminE)},${fmt(r.totalE)}`)];download('invoices.csv',lines.join('\n'));}
 function miniBarSvg(daily){
   const days=Object.keys(daily).sort(); if(!days.length) return '';
-  const vals=days.map(d=>daily[d].total||0),max=Math.max(...vals,1),w=320,h=70,bw=Math.max(2,Math.floor((w-8)/days.length)-1);
-  let x=4,bars='';
-  vals.forEach(v=>{const bh=Math.round((v/max)*(h-12));bars+=`<rect x='${x}' y='${h-bh-4}' width='${bw}' height='${bh}' fill='#3b82f6'/>`;x+=bw+1;});
-  return `<svg width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'><rect x='0' y='0' width='${w}' height='${h}' fill='#0b152b' stroke='#334155'/>${bars}</svg>`;
+  const vals=days.map(d=>daily[d].total||0),max=Math.max(...vals,1),w=520,h=190,p=30,bw=Math.max(3,Math.floor((w-p*2)/days.length)-2);
+  let x=p+1,bars='';
+  vals.forEach((v,i)=>{const bh=Math.round((v/max)*(h-p*2));const y=h-p-bh;bars+=`<rect x='${x}' y='${y}' width='${bw}' height='${bh}' fill='#2563eb'/>`;if(i%Math.max(1,Math.floor(days.length/6))===0)bars+=`<text x='${x}' y='${h-8}' font-size='9' fill='#334155'>${days[i].slice(5)}</text>`;x+=bw+2;});
+  return `<svg width='100%' height='190' viewBox='0 0 ${w} ${h}'><rect x='0' y='0' width='${w}' height='${h}' fill='#ffffff' stroke='#cbd5e1'/><line x1='${p}' y1='${h-p}' x2='${w-p}' y2='${h-p}' stroke='#64748b'/><line x1='${p}' y1='${p}' x2='${p}' y2='${h-p}' stroke='#64748b'/><text x='8' y='${p+4}' font-size='10' fill='#334155'>kWh</text><text x='${w-70}' y='${h-8}' font-size='10' fill='#334155'>Día</text><text x='${p-20}' y='${p+2}' font-size='9' fill='#334155'>${fmt(max)}</text><text x='${p-16}' y='${h-p+4}' font-size='9' fill='#334155'>0</text>${bars}</svg>`;
 }
 function printInvoicePdfAllSlots(){
   if(!state.invoiceRows.length) buildInvoices();
   if(!state.invoiceRows.length) return alert('Calculate invoice first');
   const by=indexByMeter(getInvoiceMonthRows());
+  const slotPeriods=computeSlotPeriods(by),totalPeriods={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};
+  slotPeriods.forEach(p=>{['P1','P2','P3','P4','P5','P6'].forEach(k=>totalPeriods[k]+=Number(p[k]||0));});
+  const pp=effectivePeriodPrices(totalPeriods,false);
+  const frame=`${$('filterStart').value||''} → ${$('filterEnd').value||''}`;
   const pages=state.invoiceRows.map(r=>{
     const daily=dailyBySlot(by,r.parking_slot),days=Object.keys(daily).sort();
-    const rows=days.map(d=>{const v=daily[d];return `<tr><td>${d}</td><td>${fmt(v.P1)}</td><td>${fmt(v.P2)}</td><td>${fmt(v.P3)}</td><td>${fmt(v.P4)}</td><td>${fmt(v.P5)}</td><td>${fmt(v.P6)}</td><td>${fmt(v.total)}</td></tr>`;}).join('');
-    return `<section class='page'><h2>${esc(r.parking_slot)} · ${esc(r.meterKey)}</h2><div class='head'><div><b>Start:</b> ${fmt(r.startKwh)} kWh<br><b>End:</b> ${fmt(r.endKwh)} kWh<br><b>Energy:</b> ${fmt(r.total)} kWh<br><b>Energy €:</b> ${fmt(r.energyE)} €<br><b>Total €:</b> ${fmt(r.totalE)} €</div><div>${miniBarSvg(daily)}</div></div><table><thead><tr><th>Day</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Total kWh</th></tr></thead><tbody>${rows||"<tr><td colspan='8'>No daily data</td></tr>"}</tbody></table></section>`;
+    const rows=days.map(d=>{const v=daily[d],cost=v.P1*pp.P1+v.P2*pp.P2+v.P3*pp.P3+v.P4*pp.P4+v.P5*pp.P5+v.P6*pp.P6;return `<tr><td>${d}</td><td>${fmt(v.P1)}</td><td>${fmt(v.P2)}</td><td>${fmt(v.P3)}</td><td>${fmt(v.P4)}</td><td>${fmt(v.P5)}</td><td>${fmt(v.P6)}</td><td>${fmt(v.total)}</td><td>${fmt(cost)} €</td></tr>`;}).join('');
+    const avg=r.total>0?r.totalE/r.total:0;
+    return `<section class='page'><h2>Invoice · ${esc(r.parking_slot)} · ${esc(r.meterKey)}</h2><table class='head-table'><tr><th>Periodo factura</th><td>${frame}</td><th>Start kWh</th><td>${fmt(r.startKwh)}</td><th>End kWh</th><td>${fmt(r.endKwh)}</td></tr><tr><th>P1..P6 kWh</th><td>P1 ${fmt(r.P1)} | P2 ${fmt(r.P2)} | P3 ${fmt(r.P3)} | P4 ${fmt(r.P4)} | P5 ${fmt(r.P5)} | P6 ${fmt(r.P6)}</td><th>Precios €/kWh</th><td colspan='3'>P1 ${fmt(pp.P1)} | P2 ${fmt(pp.P2)} | P3 ${fmt(pp.P3)} | P4 ${fmt(pp.P4)} | P5 ${fmt(pp.P5)} | P6 ${fmt(pp.P6)}</td></tr><tr><th>Energy kWh</th><td>${fmt(r.total)}</td><th>Energy €</th><td>${fmt(r.energyE)} €</td><th>Total € / Avg €/kWh</th><td>${fmt(r.totalE)} € / ${fmt(avg)}</td></tr></table><div class='chart-tile'><h3>Perfil diario de energía (kWh)</h3>${miniBarSvg(daily)}</div><table><thead><tr><th>Day</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Total kWh</th><th>Daily Cost</th></tr></thead><tbody>${rows||"<tr><td colspan='9'>No daily data</td></tr>"}</tbody></table><p class='tip'><b>Tarifa 3.0TD:</b> https://www.energigreen.com/tarifas-electricidad/tarifa-3-0td/ · Recomendación: Program your EV Charger during cheap periods; Reduce charging power during expensive periods to reduce excess power.</p></section>`;
   }).join('');
   const w=window.open('','_blank'); if(!w) return alert('Pop-up blocked');
-  w.document.write(`<!doctype html><html><head><meta charset='utf-8'><title>Invoice PDF</title><style>body{font-family:Arial,sans-serif;margin:0;color:#0f172a}.page{page-break-after:always;padding:18px}.head{display:flex;justify-content:space-between;gap:12px;margin:8px 0 12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:4px 6px;font-size:12px;text-align:left}h2{margin:0 0 8px}</style></head><body>${pages}</body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset='utf-8'><title>Invoice PDF</title><style>body{font-family:'Inter','Segoe UI',Arial,sans-serif;margin:0;color:#0f172a;background:#fff}.page{page-break-after:always;padding:18px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th,td{border:1px solid #cbd5e1;padding:6px 8px;font-size:12px;text-align:left}th{background:#f1f5f9}.head-table th{width:13%}.head-table td{width:20%}.chart-tile{border:1px solid #cbd5e1;background:#fff;padding:10px;margin:10px 0 12px}.chart-tile h3{margin:0 0 6px;font-size:14px}.tip{font-size:11px;color:#334155}h2{margin:0 0 10px;font-size:18px}</style></head><body>${pages}</body></html>`);
   w.document.close(); w.focus(); w.print();
 }
 function download(n,t){const b=new Blob([t],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;a.click();URL.revokeObjectURL(a.href)}
