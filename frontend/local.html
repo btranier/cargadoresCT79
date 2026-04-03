@@ -130,7 +130,7 @@ function quarterBucketUtc(ts,graceMin=3){
 function maxPower15mDetails(rows){const b=new Map(),bucketRows=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const k=quarterBucketUtc(r.ts,3).toISOString();b.set(k,(b.get(k)||0)+r.power_kw);if(!bucketRows.has(k))bucketRows.set(k,[]);bucketRows.get(k).push(r);});let max=0,maxK='';b.forEach((v,k)=>{if(v>max){max=v;maxK=k;}});const active=[];if(maxK){const byM=new Map();(bucketRows.get(maxK)||[]).forEach(r=>{if(r.power_kw>0.5)byM.set(r.meterKey,(byM.get(r.meterKey)||0)+r.power_kw);});byM.forEach((p,m)=>active.push(`${m}: ${fmt(p)} kW`));}return {max,interval:maxK,active};}
 function maxPowerByPeriod(rows){const b=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const k=quarterBucketUtc(r.ts,3).toISOString();b.set(k,(b.get(k)||0)+r.power_kw);});const out={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};b.forEach((v,k)=>{const p=tariffPeriodAt(new Date(k));if(v>out[p])out[p]=v;});return out;}
 function fmtMadrid(tsIso){if(!tsIso)return '';return new Date(tsIso).toLocaleString('es-ES',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});}
-function dailyByRowKey(map,rowKey){const out={};map.forEach((arr,m)=>{if(resolveMeta(m).match_key!==rowKey)return;const slot=resolveMeta(m).parking_slot;const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,out);} });return out;}
+function dailyByRowKey(map,rowKey){const out={};map.forEach((arr,m)=>{if(resolveMeta(m).parking_slot!==rowKey)return;const slot=resolveMeta(m).parking_slot;const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,out);} });return out;}
 function validationChecks(){
   const rows=[];
   state.byMeter.forEach((arr,k)=>{
@@ -163,11 +163,11 @@ function showBucket(hour,slot){const key=`${hour}|${slot}`,rows=(state.hourSlotR
 function renderSummary(){const c=computeConsumption(state.byMeter),rows=[...c.meter.entries()].map(([k,p])=>({meterKey:k,...p,...resolveMeta(k)})).sort((a,b)=>b.total-a.total);$('topMeters').innerHTML=rows.length?rows.map(r=>{const ok=Math.abs(r.total-r.firstLastDelta)<=0.05,diff=r.total-r.firstLastDelta;return `<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td class='${ok?'ok':'warn'}'>${ok?'✓':'Δ'} ${fmt(diff)}</td></tr>`;}).join(''):`<tr><td colspan='11' class='muted'>No data</td></tr>`;}
 
 function renderReadings(){const rows=[...state.filteredReadings].sort((a,b)=>b.ts-a.ts).slice(0,state.readingsLimit);$('readingsBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${Number.isFinite(r.volt_v)?fmt(r.volt_v):''}</td><td>${Number.isFinite(r.current_a)?fmt(r.current_a):''}</td><td>${Number.isFinite(r.power_kw)?fmt(r.power_kw):''}</td><td>${fmt(r.kwh)}</td><td>${r.ok}</td></tr>`).join(''):`<tr><td colspan='8' class='muted'>No data</td></tr>`;}
-function getMappedSlotsMeta(){const out=[];for(const [matchKey,m] of state.mappingByMatchKey.entries()){const slot=(m.slot_code||'').trim();if(!slot)continue;out.push({rowKey:matchKey,meter_id:Number(m.id||0)||'',meterKey:matchKey,parking_slot:slot,owner:m.description||''});}return out.sort((a,b)=>String(a.parking_slot).localeCompare(String(b.parking_slot))||String(a.rowKey).localeCompare(String(b.rowKey)));}
+function getMappedSlotsMeta(){const bySlot=new Map(),dups=[];for(const [matchKey,m] of state.mappingByMatchKey.entries()){const slot=(m.slot_code||'').trim();if(!slot)continue;const row={rowKey:slot,meter_id:Number(m.id||0)||'',meterKey:matchKey,parking_slot:slot,owner:m.description||''};if(bySlot.has(slot)){dups.push(`${slot}: ${bySlot.get(slot).meterKey} / ${matchKey}`);const prev=bySlot.get(slot);if((row.meter_id||Infinity)<(prev.meter_id||Infinity))bySlot.set(slot,row);}else bySlot.set(slot,row);}if(dups.length)setStatus(`WARNING: duplicate parking_slot mapping detected (${dups.length}). Using one mapping per slot. ${dups.slice(0,3).join('; ')}`);return [...bySlot.values()].sort((a,b)=>String(a.parking_slot).localeCompare(String(b.parking_slot)));}
 function computeSlotPeriods(byMeter){
   const out=new Map();
   byMeter.forEach((arr,meterKey)=>{
-    const meta=resolveMeta(meterKey),rowKey=meta.match_key,slot=meta.parking_slot;
+    const meta=resolveMeta(meterKey),rowKey=meta.parking_slot,slot=meta.parking_slot;
     if(!slot || slot==='UNMAPPED' || !rowKey) return;
     if(!out.has(rowKey)) out.set(rowKey,{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0});
     const p=out.get(rowKey);
@@ -184,7 +184,7 @@ function computeSlotPeriods(byMeter){
 function computeSlotBoundaries(byMeter){
   const out=new Map();
   byMeter.forEach((arr,meterKey)=>{
-    const meta=resolveMeta(meterKey),rowKey=meta.match_key,slot=meta.parking_slot;
+    const meta=resolveMeta(meterKey),rowKey=meta.parking_slot,slot=meta.parking_slot;
     if(!slot || slot==='UNMAPPED' || !arr.length || !rowKey) return;
     if(!out.has(rowKey)) out.set(rowKey,{start:0,end:0});
     const b=out.get(rowKey);
@@ -251,7 +251,7 @@ function miniBarSvg(daily){
 }
 function slotIdentity(by,rowKey){
   for(const [meterKey,arr] of by.entries()){
-    if(resolveMeta(meterKey).match_key!==rowKey) continue;
+    if(resolveMeta(meterKey).parking_slot!==rowKey) continue;
     const uid=meterKey.startsWith('uid:')?meterKey.slice(4):'';
     const m=resolveMeta(meterKey),match=m.match_key||'',ip=match.split('|')[0]||'',unit=match.split('|')[1]||'';
     return {uid,gateway:ip,meterId:m.meter_id||'',unit};
