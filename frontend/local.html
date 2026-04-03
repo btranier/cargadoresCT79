@@ -130,7 +130,7 @@ function quarterBucketUtc(ts,graceMin=3){
 function maxPower15mDetails(rows){const b=new Map(),bucketRows=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const k=quarterBucketUtc(r.ts,3).toISOString();b.set(k,(b.get(k)||0)+r.power_kw);if(!bucketRows.has(k))bucketRows.set(k,[]);bucketRows.get(k).push(r);});let max=0,maxK='';b.forEach((v,k)=>{if(v>max){max=v;maxK=k;}});const active=[];if(maxK){const byM=new Map();(bucketRows.get(maxK)||[]).forEach(r=>{if(r.power_kw>0.5)byM.set(r.meterKey,(byM.get(r.meterKey)||0)+r.power_kw);});byM.forEach((p,m)=>active.push(`${m}: ${fmt(p)} kW`));}return {max,interval:maxK,active};}
 function maxPowerByPeriod(rows){const b=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const k=quarterBucketUtc(r.ts,3).toISOString();b.set(k,(b.get(k)||0)+r.power_kw);});const out={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};b.forEach((v,k)=>{const p=tariffPeriodAt(new Date(k));if(v>out[p])out[p]=v;});return out;}
 function fmtMadrid(tsIso){if(!tsIso)return '';return new Date(tsIso).toLocaleString('es-ES',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});}
-function dailyBySlot(map,slot){const out={};map.forEach((arr,m)=>{if(resolveMeta(m).parking_slot!==slot)return;const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,out);} });return out;}
+function dailyByRowKey(map,rowKey){const out={};map.forEach((arr,m)=>{if(resolveMeta(m).match_key!==rowKey)return;const slot=resolveMeta(m).parking_slot;const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,out);} });return out;}
 function validationChecks(){
   const rows=[];
   state.byMeter.forEach((arr,k)=>{
@@ -159,29 +159,18 @@ function validationChecks(){
 function rebuildFromCache(){const all=[];for(const rows of state.driveRowsByDate.values())all.push(...rows);state.allReadings=dedupeReadings(all).sort((a,b)=>a.ts-b.ts);ensureMeterIds();if(state.allReadings.length){if(!$('filterStart').value)$('filterStart').value=dayStr(state.allReadings[0].ts);if(!$('filterEnd').value)$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);}applyFilterAndRender();renderMappingTable();}
 function applyFilterAndRender(){const r=range();state.filteredReadings=r?state.allReadings.filter(x=>x.ts>=r.start&&x.ts<=r.end):[...state.allReadings];state.byMeter=indexByMeter(state.filteredReadings);renderDashboard();renderSummary();renderReadings();renderInvoiceDailyDetails();validationChecks();}
 function renderDashboard(){const c=computeConsumption(state.byMeter);let total=0;c.meter.forEach(v=>total+=v.total);const hours=[...new Set([...c.hourlySlot.keys()].map(k=>k.split('|')[0]))].sort(),slots=[...new Set([...c.hourlySlot.keys()].map(k=>k.split('|')[1]))].sort();$('kpiRows').textContent=String(state.filteredReadings.length);$('kpiMeters').textContent=String(c.meter.size);$('kpiKwh').textContent=fmt(total);$('kpiHours').textContent=String(hours.length);const mp=maxPower15mDetails(state.filteredReadings);state.lastMaxPower=mp;$('kpiMaxPower').textContent=fmt(mp.max);$('kpiMaxPower').classList.add('kpi-clickable');const byM=new Map();(state.filteredReadings||[]).forEach(r=>{if(mp.interval&&quarterBucketUtc(r.ts,3).toISOString()===mp.interval&&r.power_kw>0.5){const slot=resolveMeta(r.meterKey).parking_slot||r.meterKey;byM.set(slot,(byM.get(slot)||0)+r.power_kw);}});const metersLine=[...byM.entries()].map(([slot,p])=>`${slot}: ${fmt(p)} kW`).join('; ')||'none';const info=mp.interval?`Interval: ${fmtMadrid(mp.interval)} · Active parking slots (>0.5kW): ${metersLine}`:'No interval';$('kpiMaxPower').title=info;$('kpiMaxPowerInfo').textContent=info;const per=maxPowerByPeriod(state.filteredReadings);['P1','P2','P3','P4','P5','P6'].forEach(p=>$(`kpiMax${p}`).textContent=`${fmt(per[p]||0)} kWh`);if(state.chart)state.chart.destroy();if(typeof Chart==='undefined'){ $('chartWarning').textContent='Chart.js not available';return;}const ds=slots.map((s,i)=>({label:s,data:hours.map(h=>c.hourlySlot.get(`${h}|${s}`)||0),backgroundColor:`hsl(${(i*43)%360} 70% 55%)`,stack:'k'}));state.chart=new Chart($('hourlyChart'),{type:'bar',data:{labels:hours,datasets:ds},options:{responsive:true,maintainAspectRatio:false,onClick:(evt,els)=>{if(!els.length)return;const p=els[0],hour=hours[p.index],slot=ds[p.datasetIndex].label;showBucket(hour,slot);},plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});const unmapped=[...c.meter.keys()].filter(k=>resolveMeta(k).parking_slot==='UNMAPPED');$('unmappedValidation').innerHTML=unmapped.length?`<span class='danger'>⚠ ${unmapped.length} active unmapped meter(s): ${unmapped.map(esc).join(', ')}</span>`:`<span class='ok'>✓ No unmapped active meters.</span>`;}
-function showBucket(hour,slot){const key=`${hour}|${slot}`,rows=(state.hourSlotReadings.get(key)||[]).sort((a,b)=>a.ts-b.ts);$('bucketInfo').textContent=`${key} • readings: ${rows.length} (expected 4 if no missing data)`;$('bucketBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${Number.isFinite(r.power_kw)?fmt(r.power_kw):''}</td><td>${fmt(r.kwh)}</td></tr>`).join(''):`<tr><td colspan='5' class='muted'>No readings</td></tr>`;}
+function showBucket(hour,slot){const key=`${hour}|${slot}`,rows=(state.hourSlotReadings.get(key)||[]).sort((a,b)=>a.ts-b.ts);const groups=new Map();rows.forEach(r=>{const k=`${r.meterKey}|${r.matchKey}`;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);});$('bucketInfo').textContent=`${key} • readings: ${rows.length} • keys: ${groups.size} (expected 4 per key if no missing data)`;$('bucketBody').innerHTML=rows.length?[...groups.entries()].map(([k,arr])=>{const header=`<tr><td colspan='5' class='muted'><b>${esc(k)}</b> (${arr.length} rows)</td></tr>`;return header+arr.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${Number.isFinite(r.power_kw)?fmt(r.power_kw):''}</td><td>${fmt(r.kwh)}</td></tr>`).join('');}).join(''):`<tr><td colspan='5' class='muted'>No readings</td></tr>`;}
 function renderSummary(){const c=computeConsumption(state.byMeter),rows=[...c.meter.entries()].map(([k,p])=>({meterKey:k,...p,...resolveMeta(k)})).sort((a,b)=>b.total-a.total);$('topMeters').innerHTML=rows.length?rows.map(r=>{const ok=Math.abs(r.total-r.firstLastDelta)<=0.05,diff=r.total-r.firstLastDelta;return `<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td class='${ok?'ok':'warn'}'>${ok?'✓':'Δ'} ${fmt(diff)}</td></tr>`;}).join(''):`<tr><td colspan='11' class='muted'>No data</td></tr>`;}
 
 function renderReadings(){const rows=[...state.filteredReadings].sort((a,b)=>b.ts-a.ts).slice(0,state.readingsLimit);$('readingsBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${Number.isFinite(r.volt_v)?fmt(r.volt_v):''}</td><td>${Number.isFinite(r.current_a)?fmt(r.current_a):''}</td><td>${Number.isFinite(r.power_kw)?fmt(r.power_kw):''}</td><td>${fmt(r.kwh)}</td><td>${r.ok}</td></tr>`).join(''):`<tr><td colspan='8' class='muted'>No data</td></tr>`;}
-function getMappedSlotsMeta(){
-  const bySlot=new Map();
-  for(const [matchKey,m] of state.mappingByMatchKey.entries()){
-    const slot=(m.slot_code||'').trim();
-    if(!slot) continue;
-    const id=Number(m.id||0)||'';
-    if(!bySlot.has(slot) || (id && id < (Number(bySlot.get(slot).meter_id)||Infinity))){
-      bySlot.set(slot,{meter_id:id,meterKey:matchKey,parking_slot:slot,owner:m.description||''});
-    }
-  }
-  return [...bySlot.values()].sort((a,b)=>String(a.parking_slot).localeCompare(String(b.parking_slot)));
-}
+function getMappedSlotsMeta(){const out=[];for(const [matchKey,m] of state.mappingByMatchKey.entries()){const slot=(m.slot_code||'').trim();if(!slot)continue;out.push({rowKey:matchKey,meter_id:Number(m.id||0)||'',meterKey:matchKey,parking_slot:slot,owner:m.description||''});}return out.sort((a,b)=>String(a.parking_slot).localeCompare(String(b.parking_slot))||String(a.rowKey).localeCompare(String(b.rowKey)));}
 function computeSlotPeriods(byMeter){
   const out=new Map();
   byMeter.forEach((arr,meterKey)=>{
-    const slot=resolveMeta(meterKey).parking_slot;
-    if(!slot || slot==='UNMAPPED') return;
-    if(!out.has(slot)) out.set(slot,{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0});
-    const p=out.get(slot);
+    const meta=resolveMeta(meterKey),rowKey=meta.match_key,slot=meta.parking_slot;
+    if(!slot || slot==='UNMAPPED' || !rowKey) return;
+    if(!out.has(rowKey)) out.set(rowKey,{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0});
+    const p=out.get(rowKey);
     for(let i=1;i<arr.length;i++){
       const d=arr[i].kwh-arr[i-1].kwh;
       if(d>0&&d<500){
@@ -195,10 +184,10 @@ function computeSlotPeriods(byMeter){
 function computeSlotBoundaries(byMeter){
   const out=new Map();
   byMeter.forEach((arr,meterKey)=>{
-    const slot=resolveMeta(meterKey).parking_slot;
-    if(!slot || slot==='UNMAPPED' || !arr.length) return;
-    if(!out.has(slot)) out.set(slot,{start:0,end:0});
-    const b=out.get(slot);
+    const meta=resolveMeta(meterKey),rowKey=meta.match_key,slot=meta.parking_slot;
+    if(!slot || slot==='UNMAPPED' || !arr.length || !rowKey) return;
+    if(!out.has(rowKey)) out.set(rowKey,{start:0,end:0});
+    const b=out.get(rowKey);
     b.start += Number(arr[0].kwh||0);
     b.end += Number(arr[arr.length-1].kwh||0);
   });
@@ -221,11 +210,11 @@ function buildInvoices(){
   const slots=getMappedSlotsMeta();
   const divisor=Math.max(slots.length,1),capPer=cap/divisor,admPer=adm/divisor;
   state.invoiceRows=slots.map(meta=>{
-    const p=slotPeriods.get(meta.parking_slot)||{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};
-    const b=slotBounds.get(meta.parking_slot)||{start:0,end:0};
+    const p=slotPeriods.get(meta.rowKey)||{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};
+    const b=slotBounds.get(meta.rowKey)||{start:0,end:0};
     const energyE=p.P1*pp.P1+p.P2*pp.P2+p.P3*pp.P3+p.P4*pp.P4+p.P5*pp.P5+p.P6*pp.P6;
     const totalE=energyE+capPer+admPer;
-    return {rowKey:meta.parking_slot,meter_id:meta.meter_id,meterKey:meta.meterKey,parking_slot:meta.parking_slot,startKwh:b.start,endKwh:b.end,...p,energyE,capacityE:capPer,adminE:admPer,totalE};
+    return {rowKey:meta.rowKey,meter_id:meta.meter_id,meterKey:meta.meterKey,parking_slot:meta.parking_slot,startKwh:b.start,endKwh:b.end,...p,energyE,capacityE:capPer,adminE:admPer,totalE};
   });
   $('invoiceBody').innerHTML=state.invoiceRows.length
     ? state.invoiceRows.map(r=>{const eurPerKwh=r.total>0?r.energyE/r.total:0;return `<tr data-m='${esc(r.rowKey)}' class='${state.selectedInvoiceMeterKey===r.rowKey?'selected':''}'><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${fmt(r.startKwh)}</td><td>${fmt(r.endKwh)}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td>€ ${fmt(r.energyE)}</td><td>€ ${fmt(r.capacityE)}</td><td>€ ${fmt(r.adminE)}</td><td class='total-eur-col'>€ ${fmt(r.totalE)}<span class='eur-kwh-note'>€/kWh: ${fmt(eurPerKwh)}</span></td></tr>`;}).join('')
@@ -238,13 +227,13 @@ function renderInvoiceDailyDetails(){
   const body=$('invoiceDailyBody');
   if(!body) return;
   if(!state.selectedInvoiceMeterKey){$('invoiceDailyInfo').textContent='Select an invoice summary row.';body.innerHTML='<tr><td colspan=\"9\" class=\"muted\">No selection</td></tr>';return;}
-  const slot=state.selectedInvoiceMeterKey;
+  const selected=state.invoiceRows.find(r=>r.rowKey===state.selectedInvoiceMeterKey),slot=selected?selected.parking_slot:state.selectedInvoiceMeterKey;
   const m=$('invoiceMonth').value;if(!m){body.innerHTML='';return;}
   const by=indexByMeter(getInvoiceMonthRows());
   const slotPeriods=computeSlotPeriods(by),totalPeriods={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};
   slotPeriods.forEach(p=>{['P1','P2','P3','P4','P5','P6'].forEach(k=>totalPeriods[k]+=Number(p[k]||0));});
-  const daily=dailyBySlot(by,slot),pp=effectivePeriodPrices(totalPeriods),days=Object.keys(daily).sort();
-  $('invoiceDailyInfo').textContent=`Parking slot: ${slot}`;
+  const daily=dailyByRowKey(by,state.selectedInvoiceMeterKey),pp=effectivePeriodPrices(totalPeriods),days=Object.keys(daily).sort();
+  $('invoiceDailyInfo').textContent=`Parking slot: ${slot} (${state.selectedInvoiceMeterKey})`;
   body.innerHTML=days.length
     ? days.map(d=>{const r=daily[d],cost=r.P1*pp.P1+r.P2*pp.P2+r.P3*pp.P3+r.P4*pp.P4+r.P5*pp.P5+r.P6*pp.P6;return `<tr><td>${d}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td>${fmt(cost)}</td></tr>`;}).join('')
     : `<tr><td colspan='9' class='muted'>No daily data</td></tr>`;
@@ -260,9 +249,9 @@ function miniBarSvg(daily){
   const grid=[0.25,0.5,0.75,1].map(r=>{const y=(h-p)-Math.round((h-p*2)*r);return `<line x1='${p}' y1='${y}' x2='${w-p}' y2='${y}' stroke='#e2e8f0'/><text x='${p-24}' y='${y+3}' font-size='8' fill='#64748b'>${fmt(max*r)}</text>`;}).join('');
   return `<svg width='100%' height='210' viewBox='0 0 ${w} ${h}'><rect x='0' y='0' width='${w}' height='${h}' fill='#ffffff' stroke='#cbd5e1'/>${legend}${grid}<line x1='${p}' y1='${h-p}' x2='${w-p}' y2='${h-p}' stroke='#64748b'/><line x1='${p}' y1='${p}' x2='${p}' y2='${h-p}' stroke='#64748b'/><text x='2' y='14' font-size='9' fill='#334155'>kWh</text><text x='${p-12}' y='${h-p+4}' font-size='9' fill='#334155'>0</text>${bars}</svg>`;
 }
-function slotIdentity(by,slot){
+function slotIdentity(by,rowKey){
   for(const [meterKey,arr] of by.entries()){
-    if(resolveMeta(meterKey).parking_slot!==slot) continue;
+    if(resolveMeta(meterKey).match_key!==rowKey) continue;
     const uid=meterKey.startsWith('uid:')?meterKey.slice(4):'';
     const m=resolveMeta(meterKey),match=m.match_key||'',ip=match.split('|')[0]||'',unit=match.split('|')[1]||'';
     return {uid,gateway:ip,meterId:m.meter_id||'',unit};
@@ -279,8 +268,8 @@ function printInvoicePdfAllSlots(){
   const excess=periodExcess();
   const frame=`${$('filterStart').value||''} → ${$('filterEnd').value||''}`;
   const pages=state.invoiceRows.map(r=>{
-    const id=slotIdentity(by,r.parking_slot);
-    const daily=dailyBySlot(by,r.parking_slot),days=Object.keys(daily).sort();
+    const id=slotIdentity(by,r.rowKey);
+    const daily=dailyByRowKey(by,r.rowKey),days=Object.keys(daily).sort();
     const rows=days.map(d=>{const v=daily[d],cost=v.P1*pp.P1+v.P2*pp.P2+v.P3*pp.P3+v.P4*pp.P4+v.P5*pp.P5+v.P6*pp.P6;return `<tr><td>${d}</td><td>${fmt(v.P1)}</td><td>${fmt(v.P2)}</td><td>${fmt(v.P3)}</td><td>${fmt(v.P4)}</td><td>${fmt(v.P5)}</td><td>${fmt(v.P6)}</td><td>${fmt(v.total)}</td><td>${fmt(cost)} €</td></tr>`;}).join('');
     const avg=r.total>0?r.totalE/r.total:0;
     return `<section class='page'><h2>Invoice · ${esc(r.parking_slot)}</h2><table class='head-table'><tr class='period-row'><th>Billing period</th><td colspan='5'>${frame}</td></tr><tr><th>UID</th><td>${esc(id.uid||'-')}</td><th>Gateway IP</th><td>${esc(id.gateway||'-')}</td><th>Meter ID</th><td>${esc(id.meterId||'-')}</td></tr><tr><th>Start kWh</th><td>${fmt(r.startKwh)}</td><th>End kWh</th><td>${fmt(r.endKwh)}</td><th>Total €</th><td>${fmt(r.totalE)} €</td></tr></table><table class='period-table'><thead><tr><th></th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th></tr></thead><tbody><tr><th>kWh</th><td>${fmt(r.P1)}</td><td>${fmt(r.P2)}</td><td>${fmt(r.P3)}</td><td>${fmt(r.P4)}</td><td>${fmt(r.P5)}</td><td>${fmt(r.P6)}</td></tr><tr class='price-row'><th>€/kWh</th><td>${fmt(pp.P1)}</td><td>${fmt(pp.P2)}</td><td>${fmt(pp.P3)}</td><td>${fmt(pp.P4)}</td><td>${fmt(pp.P5)}</td><td>${fmt(pp.P6)}</td></tr></tbody></table><div class='kpis'><div class='kpi'>Energy kWh<br><b>${fmt(r.total)}</b></div><div class='kpi'>Energy €<br><b>${fmt(r.energyE)} €</b></div><div class='kpi'>Average €/kWh<br><b>${fmt(avg)}</b></div></div><div class='chart-tile'><h3>Daily consumption stacked by tariff period (kWh)</h3>${miniBarSvg(daily)}</div><table class='daily'><thead><tr><th>Day</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Total kWh</th><th>Daily Cost</th></tr></thead><tbody>${rows||"<tr><td colspan='9'>No daily data</td></tr>"}</tbody></table><p class='tip'>Excess contribution (€): P1 ${fmt(excess.P1)} / P2 ${fmt(excess.P2)} / P3 ${fmt(excess.P3)} / P4 ${fmt(excess.P4)} / P5 ${fmt(excess.P5)} / P6 ${fmt(excess.P6)} · Effective price calculation: base price + (excess € / period kWh).</p><p class='tip'><b>Tariff Period Definition, 3.0 TD:</b> https://www.energigreen.com/tarifas-electricidad/tarifa-3-0td/ · Recommendation: Schedule EV charging during cheaper periods and reduce charging power during expensive periods to minimize excess-power costs.</p></section>`;
