@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>EV Charger Monitoring CT 7-9</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#16253b;--panel:#111827;--panel2:#0b1220;--border:#273449;--text:#e5e7eb;--muted:#94a3b8;--zero:#64748b;--tab:#1f334f;--tabActive:#2f5c8f}
+*{box-sizing:border-box}body{margin:0;font-family:'SF Pro Display','Inter','Segoe UI Variable',ui-sans-serif,system-ui;background:var(--bg);color:var(--text)}
+.wrap{max-width:1380px;margin:0 auto;padding:16px}.card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:18px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:4px}.field label{font-size:11px;color:#8fb1d9}.muted{font-size:12px;color:var(--muted)}
+input,button,select{background:#0b152b;color:var(--text);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12px}
+button{cursor:pointer;background:#1d4ed8;border-color:#3b82f6;font-weight:700;color:#eef6ff}button:hover{background:#2563eb}button:active{transform:translateY(1px)}
+.tabs{display:flex;gap:18px;margin:10px 0 18px;flex-wrap:wrap}.tab{background:var(--tab);padding:20px 30px;font-size:18px;font-weight:700;border-radius:14px;display:flex;align-items:center;gap:10px}.tab.active{background:var(--tabActive);outline:2px solid #60a5fa}.tab-icon{font-size:22px;line-height:1}.view{display:none}.view.active{display:block}
+table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:7px;border-bottom:1px solid #1f2b3f;text-align:left;font-size:12px;vertical-align:top;word-break:break-word}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.kpi{font-size:20px;font-weight:700}.kpi-sub{font-size:11px;color:#93c5fd;margin-top:4px;line-height:1.3}.chart-wrap{height:420px}
+.zero{color:var(--zero)} .warn{color:#f59e0b} .danger{color:#f87171} .ok{color:#34d399}
+.table-wrap{max-width:100%;overflow:auto;border:1px solid #1f2b3f;border-radius:10px}
+.card-title{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#93c5fd;margin-bottom:10px;font-weight:700}
+.load-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.load-box{height:100%}
+.actions-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.actions-row.bottom{margin-top:10px;margin-bottom:0}
+.btn-bottom{background:#0f2a57;border-color:#1e3a8a}
+.btn-bottom:hover{background:#123066}
+.btn-cta{padding:10px 16px;font-size:14px;background:#b45309;border-color:#f59e0b;color:#fff}
+.btn-cta:hover{background:#d97706}
+#invoiceBody tr.selected{background:#1e3a5f;outline:1px solid #60a5fa}
+.total-eur-col{background:#1f2937}
+.eur-kwh-note{font-size:11px;color:#93c5fd;font-style:italic;display:block;margin-top:2px}
+.date-drop{padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,#93c5fd 50%),linear-gradient(135deg,#93c5fd 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 2px),calc(100% - 8px) calc(50% + 2px);background-size:6px 6px,6px 6px;background-repeat:no-repeat}
+.param-rows{display:flex;flex-direction:column;gap:14px}
+.kpi-clickable{cursor:pointer}
+.modal{position:fixed;inset:0;background:rgba(2,6,23,.72);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal.open{display:flex}
+.modal-card{width:min(560px,92vw);background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:12px;padding:14px}
+.modal-title{font-size:14px;font-weight:700;margin-bottom:8px;color:#bfdbfe}
+.modal-line{font-size:12px;color:#cbd5e1;margin-bottom:6px;word-break:break-word}
+.kpi-period-line{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}
+.kpi-period-item .muted{font-size:11px}
+.kpi-period-value{font-size:14px;font-weight:700}
+.price-hint{font-size:11px;color:#93c5fd;font-style:italic}
+</style>
+</head>
+<body><div class="wrap">
+<div class="row" style="justify-content:space-between"><h2 data-i18n="title">EV Charger Monitoring CT 7-9</h2><div class="field"><label class="muted" data-i18n="language">Language</label><select id="langSwitch"><option value="en">English</option><option value="es">Español</option></select></div></div>
+
+<div class="load-grid">
+  <div class="card load-box">
+    <div class="card-title" data-i18n="load_tile">Load data</div>
+    <div class="actions-row"><button id="btnLoadDrivePeriod" data-i18n="load_drive">Load period from Drive</button><button id="btnLoadLocal" data-i18n="load_local">Load local files</button></div>
+    <div class="row"><div class="field"><label data-i18n="drive_folder">Drive folder</label><input id="folderId" value="1iENYO8hbW0BNgXUd4v_FEs9Ve5oyHOpv"/></div><div class="field"><label data-i18n="api_key">API key</label><input id="apiKey"/></div><div class="field"><label data-i18n="local_files">Local readings files</label><input id="localFiles" type="file" multiple accept=".csv"/></div></div>
+    <div class="actions-row bottom"><button id="btnLoadStdMap" class="btn-bottom" data-i18n="load_std_mapping">Load standard mapping</button><button id="btnClearData" class="btn-bottom" data-i18n="clear_cache">Clear cache</button></div>
+  </div>
+  <div class="card load-box">
+    <div class="card-title" data-i18n="analysis_tile">Analysis period</div>
+    <div class="row"><div class="field"><label data-i18n="start_day">Start day</label><input id="filterStart" class="date-drop" type="date" onfocus="this.showPicker&&this.showPicker()"/></div><div class="field"><label data-i18n="end_day">End day</label><input id="filterEnd" class="date-drop" type="date" onfocus="this.showPicker&&this.showPicker()"/></div></div>
+    <div class="row" style="margin-top:8px"><button id="btnApplyFilter" data-i18n="apply_filter">Apply filter</button><button id="btnResetFilter" data-i18n="reset">Reset</button></div>
+    <div id="status" class="muted" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div class="tabs"><button class="tab active" data-view="dashboard"><span class="tab-icon">📊</span><span data-i18n="tab_dashboard">Dashboard</span></button><button class="tab" data-view="invoicing"><span class="tab-icon">🧾</span><span data-i18n="tab_invoicing">Invoicing</span></button><button class="tab" data-view="mappings"><span class="tab-icon">🗂️</span><span data-i18n="tab_mappings">Mappings</span></button><button class="tab" data-view="readings"><span class="tab-icon">📄</span><span data-i18n="tab_readings">Readings</span></button><button class="tab" data-view="validation"><span class="tab-icon">⚠️</span><span data-i18n="tab_validation">Warnings / Validation</span></button></div>
+
+<section id="view-dashboard" class="view active">
+<div class="card"><div class="card-title" data-i18n="analytics_tile">Analytics</div><div class="grid"><div><div class="muted" data-i18n="rows_ok">Rows (ok only)</div><div id="kpiRows" class="kpi">0</div></div><div><div class="muted" data-i18n="active_meters">Active meters</div><div id="kpiMeters" class="kpi">0</div></div><div><div class="muted" data-i18n="total_kwh">Total kWh</div><div id="kpiKwh" class="kpi">0.00</div></div><div><div class="muted" data-i18n="hours">Hours</div><div id="kpiHours" class="kpi">0</div></div><div><div class="muted" data-i18n="max_capacity">Max Power kW (15m)</div><div id="kpiMaxPower" class="kpi">0.00</div><div id="kpiMaxPowerInfo" class="kpi-sub"></div></div></div><div class="kpi-period-line"><div class="kpi-period-item"><div class="muted" data-i18n="max_kw_p1">Max kW P1</div><div id="kpiMaxP1" class="kpi-period-value">0.00 kWh</div></div><div class="kpi-period-item"><div class="muted" data-i18n="max_kw_p2">Max kW P2</div><div id="kpiMaxP2" class="kpi-period-value">0.00 kWh</div></div><div class="kpi-period-item"><div class="muted" data-i18n="max_kw_p3">Max kW P3</div><div id="kpiMaxP3" class="kpi-period-value">0.00 kWh</div></div><div class="kpi-period-item"><div class="muted" data-i18n="max_kw_p4">Max kW P4</div><div id="kpiMaxP4" class="kpi-period-value">0.00 kWh</div></div><div class="kpi-period-item"><div class="muted" data-i18n="max_kw_p5">Max kW P5</div><div id="kpiMaxP5" class="kpi-period-value">0.00 kWh</div></div><div class="kpi-period-item"><div class="muted" data-i18n="max_kw_p6">Max kW P6</div><div id="kpiMaxP6" class="kpi-period-value">0.00 kWh</div></div></div></div>
+<div class="card"><h3 data-i18n="hourly_chart">Hourly kWh (stacked by parking_slot)</h3><div class="chart-wrap"><canvas id="hourlyChart"></canvas></div><div id="chartWarning" class="muted"></div></div>
+<div class="card"><h3 data-i18n="bucket_readings">Bucket readings (from chart click)</h3><div id="bucketInfo" class="muted"></div><div class="table-wrap"><table><thead><tr><th>ts</th><th>meter</th><th>match_key</th><th>power_kw</th><th>kwh_import</th></tr></thead><tbody id="bucketBody"></tbody></table></div></div>
+<div class="card"><div id="unmappedValidation" class="muted"></div></div>
+<div class="card"><h3 data-i18n="summary_split">Consumption split by tariff periods (P1..P6)</h3><div class="table-wrap"><table><thead><tr><th data-i18n="meter_id">meter_id</th><th data-i18n="meter_uid">meter(uid)</th><th data-i18n="parking_slot">parking_slot</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th data-i18n="total">Total</th><th data-i18n="delta_validation">Delta validation</th></tr></thead><tbody id="topMeters"></tbody></table></div></div>
+</section>
+
+<section id="view-invoicing" class="view"><div class="card"><div class="param-rows"><div class="row"><div class="field"><label data-i18n="month">Month</label><input id="invoiceMonth" type="month"/></div></div><div class="row"><div class="field"><label data-i18n="p1_label">P1 €/kWh</label><input id="priceP1" type="number" step="0.0001" value="0.20"/></div><div class="field"><label data-i18n="p2_label">P2 €/kWh</label><input id="priceP2" type="number" step="0.0001" value="0.20"/></div><div class="field"><label data-i18n="p3_label">P3 €/kWh</label><input id="priceP3" type="number" step="0.0001" value="0.20"/></div><div class="field"><label data-i18n="p4_label">P4 €/kWh</label><input id="priceP4" type="number" step="0.0001" value="0.20"/></div><div class="field"><label data-i18n="p5_label">P5 €/kWh</label><input id="priceP5" type="number" step="0.0001" value="0.20"/></div><div class="field"><label data-i18n="p6_label">P6 €/kWh</label><input id="priceP6" type="number" step="0.0001" value="0.20"/></div></div><div class="row"><div class="field"><label data-i18n="p1_excess_label">P1 Excess Power €</label><input id="excessP1" type="number" step="0.01" value="0"/></div><div class="field"><label data-i18n="p2_excess_label">P2 Excess Power €</label><input id="excessP2" type="number" step="0.01" value="0"/></div><div class="field"><label data-i18n="p3_excess_label">P3 Excess Power €</label><input id="excessP3" type="number" step="0.01" value="0"/></div><div class="field"><label data-i18n="p4_excess_label">P4 Excess Power €</label><input id="excessP4" type="number" step="0.01" value="0"/></div><div class="field"><label data-i18n="p5_excess_label">P5 Excess Power €</label><input id="excessP5" type="number" step="0.01" value="0"/></div><div class="field"><label data-i18n="p6_excess_label">P6 Excess Power €</label><input id="excessP6" type="number" step="0.01" value="0"/></div></div><div class="row"><div class="field"><label data-i18n="capacity_fee">Capacity €</label><input id="capacityFee" type="number" step="0.01" value="0"/></div><div class="field"><label data-i18n="admin_fee">Admin €</label><input id="adminFee" type="number" step="0.01" value="0"/></div></div><div id="invoicePriceHint" class="price-hint"></div><div class="row"><button id="btnBuildInvoice" class="btn-cta" data-i18n="calculate_invoice">Calculate Invoice</button><button id="btnExportCsv" class="btn-cta" data-i18n="export_csv">Export CSV</button><button id="btnPrintInvoicePdf" class="btn-cta" data-i18n="print_pdf">Print PDF</button></div></div></div>
+<div class="card"><div class="table-wrap"><table><thead><tr><th data-i18n="meter_uid">uid/key</th><th data-i18n="parking_slot">parking</th><th data-i18n="start_value_kwh">Start Value kWh</th><th data-i18n="end_value_kwh">End Value kWh</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th data-i18n="energy_kwh">Energy kWh</th><th>Energy €</th><th>Capacity €</th><th>Admin €</th><th class="total-eur-col" data-i18n="total_eur">Total €</th></tr></thead><tbody id="invoiceBody"></tbody></table></div></div>
+<div class="card">
+  <h3 data-i18n="daily_details">Daily details by parking slot</h3>
+  <div id="invoiceDailyInfo" class="muted">Select an invoice summary row.</div>
+  <div class="table-wrap"><table><thead><tr><th data-i18n="day">Day</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th data-i18n="daily_kwh">Daily kWh</th><th data-i18n="daily_cost">Daily Cost (€)</th></tr></thead><tbody id="invoiceDailyBody"></tbody></table></div>
+</div>
+</section>
+
+<section id="view-mappings" class="view"><div class="card"><div class="row"><button id="btnLoadRepoMapping">Load data/local_standard_mapping.csv</button><div class="field"><label data-i18n="import_mapping">Import mapping CSV</label><input id="mappingFile" type="file" accept=".csv"/></div><button id="btnImportMapping" data-i18n="import">Import</button><button id="btnClearMappings" data-i18n="clear_mappings">Clear mappings</button><button id="btnSaveMapping" data-i18n="save_local">Save local</button><button id="btnExportMapping" data-i18n="export">Export</button></div><div class="table-wrap"><table><thead><tr><th data-i18n="meter_id">meter_id</th><th data-i18n="match_key">match_key(ip:port|unit)</th><th data-i18n="slot_code">slot_code</th><th data-i18n="owner">owner</th><th data-i18n="status">status</th></tr></thead><tbody id="mappingBody"></tbody></table></div></div></section>
+
+<section id="view-readings" class="view"><div class="card"><div class="table-wrap"><table><thead><tr><th>ts</th><th data-i18n="meter_uid">uid/key</th><th data-i18n="match_key">match_key</th><th>volt_v</th><th>current_a</th><th>power_kw</th><th>kwh_import</th><th>ok</th></tr></thead><tbody id="readingsBody"></tbody></table></div><button id="btnMoreReadings" style="margin-top:8px" data-i18n="show_more">Show more</button></div></section>
+
+<section id="view-validation" class="view"><div class="card"><h3 data-i18n="validation_header">Warnings / Validation checks</h3><div class="table-wrap"><table><thead><tr><th>meter_id</th><th>ip</th><th>parking_slot</th><th>description</th><th>from</th><th>to</th><th>gap_min</th></tr></thead><tbody id="validationBody"></tbody></table></div></div></section>
+
+</div>
+<div id="maxPowerModal" class="modal"><div class="modal-card"><div class="modal-title" data-i18n="max_power_details">Overall Max Power details</div><div id="maxPowerModalInterval" class="modal-line"></div><div id="maxPowerModalMeters" class="modal-line"></div><div class="row" style="justify-content:flex-end"><button id="btnCloseMaxPowerModal">Close</button></div></div></div>
+<script>
+const TZ='Europe/Madrid',MIN_KWH=0.5,MAP_KEY='ct79_map_v6';
+const state={selectedInvoiceMeterKey:null,allReadings:[],filteredReadings:[],byMeter:new Map(),chart:null,invoiceRows:[],driveRowsByDate:new Map(),driveFilesByDate:new Map(),mappingByMatchKey:new Map(),meterIdByMeterKey:new Map(),meterMatchByMeterKey:new Map(),readingsLimit:1000,lang:'en',hourSlotReadings:new Map(),lastMaxPower:null};
+const $=id=>document.getElementById(id);
+const i18n={en:{title:'EV Charger Monitoring CT 7-9',language:'Language',load_tile:'Load data',analysis_tile:'Analysis period',drive_folder:'Drive folder',api_key:'API key',start_day:'Start day',end_day:'End day',load_drive:'Load period from Drive',apply_filter:'Apply filter',reset:'Reset',local_files:'Local readings files',load_local:'Load local files',clear_cache:'Clear cache',load_std_mapping:'Load standard mapping',tab_dashboard:'Dashboard',tab_invoicing:'Invoicing',tab_mappings:'Mappings',tab_readings:'Readings',tab_validation:'Missing Readings',rows_ok:'Rows (ok only)',active_meters:'Active meters',total_kwh:'Total kWh',hours:'Hours',analytics_tile:'Analytics',max_capacity:'Max Power kW (15m)',max_kw_p1:'Max kW P1',max_kw_p2:'Max kW P2',max_kw_p3:'Max kW P3',max_kw_p4:'Max kW P4',max_kw_p5:'Max kW P5',max_kw_p6:'Max kW P6',max_power_details:'Overall Max Power details',hourly_chart:'Hourly kWh (stacked by parking_slot)',bucket_readings:'Bucket readings (from chart click)',summary_split:'Consumption split by tariff periods (P1..P6)',meter_id:'meter_id',meter_uid:'counter(uid)',parking_slot:'parking_slot',start_value_kwh:'Start Value kWh',end_value_kwh:'End Value kWh',total:'Total',delta_validation:'Delta validation',select_parking:'Select parking slot',daily_details:'Daily details by parking slot',day:'Day',daily_kwh:'Daily kWh',daily_cost:'Daily Cost (€)',month:'Month',capacity_fee:'Power €',admin_fee:'Admin €',calculate_invoice:'Calculate Invoice',export_csv:'Export CSV',print_pdf:'Print PDF',energy_kwh:'Energy kWh',total_eur:'Total €',import_mapping:'Import mapping CSV',import:'Import',save_local:'Save local',export:'Export',match_key:'match_key(ip:port|unit)',slot_code:'slot_code',owner:'owner',status:'status',show_more:'Show more',p1_label:'P1 €/kWh',p2_label:'P2 €/kWh',p3_label:'P3 €/kWh',p4_label:'P4 €/kWh',p5_label:'P5 €/kWh',p6_label:'P6 €/kWh',p1_excess_label:'P1 Excess Power €',p2_excess_label:'P2 Excess Power €',p3_excess_label:'P3 Excess Power €',p4_excess_label:'P4 Excess Power €',p5_excess_label:'P5 Excess Power €',p6_excess_label:'P6 Excess Power €',clear_mappings:'Clear mappings',validation_header:'Missing Readings'},es:{title:'Monitorización de Cargadores CT 7-9',language:'Idioma',load_tile:'Carga de datos',analysis_tile:'Periodo de análisis',drive_folder:'Carpeta Drive',api_key:'API key',start_day:'Inicio',end_day:'Fin',load_drive:'Cargar periodo desde Drive',apply_filter:'Aplicar filtro',reset:'Reiniciar',local_files:'Ficheros locales',load_local:'Cargar ficheros locales',clear_cache:'Limpiar caché',load_std_mapping:'Cargar mapeo estándar',tab_dashboard:'Dashboard',tab_invoicing:'Facturación',tab_mappings:'Mapeos',tab_readings:'Lecturas',tab_validation:'Lecturas faltantes',rows_ok:'Filas (solo ok)',active_meters:'Medidores activos',total_kwh:'kWh total',hours:'Horas',analytics_tile:'Analítica',max_capacity:'Máxima Potencia kW (15m)',max_kw_p1:'Max kW P1',max_kw_p2:'Max kW P2',max_kw_p3:'Max kW P3',max_kw_p4:'Max kW P4',max_kw_p5:'Max kW P5',max_kw_p6:'Max kW P6',max_power_details:'Detalle de Máxima Potencia',hourly_chart:'kWh horario (apilado por plaza)',bucket_readings:'Lecturas del bloque (clic en gráfico)',summary_split:'Consumo por periodos tarifarios (P1..P6)',meter_id:'meter_id',meter_uid:'contador(uid)',parking_slot:'plaza',start_value_kwh:'Valor inicial kWh',end_value_kwh:'Valor final kWh',total:'Total',delta_validation:'Validación delta',select_parking:'Seleccionar plaza',daily_details:'Detalle diario por plaza',day:'Día',daily_kwh:'kWh diario',daily_cost:'Coste diario (€)',month:'Mes',capacity_fee:'Potencia €',admin_fee:'Administración €',calculate_invoice:'Calcular factura',export_csv:'Exportar CSV',print_pdf:'Imprimir PDF',energy_kwh:'Energía kWh',total_eur:'Total €',import_mapping:'Importar CSV mapeo',import:'Importar',save_local:'Guardar local',export:'Exportar',match_key:'clave(ip:port|unit)',slot_code:'código plaza',owner:'propietario',status:'estado',show_more:'Mostrar más',p1_label:'P1 €/kWh',p2_label:'P2 €/kWh',p3_label:'P3 €/kWh',p4_label:'P4 €/kWh',p5_label:'P5 €/kWh',p6_label:'P6 €/kWh',p1_excess_label:'P1 Exceso Potencia €',p2_excess_label:'P2 Exceso Potencia €',p3_excess_label:'P3 Exceso Potencia €',p4_excess_label:'P4 Exceso Potencia €',p5_excess_label:'P5 Exceso Potencia €',p6_excess_label:'P6 Exceso Potencia €',clear_mappings:'Borrar mapeos',validation_header:'Lecturas faltantes'}};
+function t(k){return i18n[state.lang][k]||k;} function applyLang(){document.documentElement.lang=state.lang;document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=t(el.dataset.i18n));}
+const fmt=v=>Number(v||0).toFixed(2), zero=v=>Math.abs(Number(v||0))<1e-9?'zero':''; function setStatus(x){$('status').textContent=x;} function esc(s){return String(s??'').replace(/[&<>\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]));}
+const dayStr=d=>d.toISOString().slice(0,10),hourStr=d=>d.toISOString().slice(0,13)+':00',noDash=s=>s.replaceAll('-','');
+function parseCsv(text){let rows=[],row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(q){if(c==='"'&&n==='"'){cell+='"';i++;}else if(c==='"')q=false;else cell+=c;}else{if(c==='"')q=true;else if(c===','){row.push(cell);cell='';}else if(c==='\n'){row.push(cell);rows.push(row);row=[];cell='';}else if(c!=='\r')cell+=c;}}if(cell||row.length){row.push(cell);rows.push(row);}if(!rows.length)return[];const h=rows[0].map(x=>x.trim());return rows.slice(1).filter(r=>r.some(x=>x.trim())).map(r=>{const o={};h.forEach((k,i)=>o[k]=(r[i]??'').trim());return o;});}
+function enumDays(s,e){const out=[];let d=new Date(`${s}T00:00:00Z`),end=new Date(`${e}T00:00:00Z`);while(d<=end){out.push(dayStr(d));d.setUTCDate(d.getUTCDate()+1);}return out;}
+function parseGateway(g){const [ip,port='502']=String(g||'').split(':');return {ip:(ip||'').trim(),port:String(port).trim()};}
+function normalizeRows(rows){return rows.map(r=>{const ts=new Date(r.timestamp_utc||r.ts_utc||''),{ip,port}=parseGateway(r.gateway),unit=String(r.unit||''),uid=(r.device_uid||'').trim(),meterKey=uid?`uid:${uid}`:`${ip}:${port}|${unit}`;return {ts,tsStr:r.timestamp_utc||'',meterKey,matchKey:`${ip}:${port}|${unit}`,kwh:Number(r.kwh_import),ok:String(r.ok).toLowerCase()==='true',volt_v:Number(r.volt_v),current_a:Number(r.current_a),power_kw:Number(r.power_kw)};}).filter(r=>!Number.isNaN(r.ts.getTime())&&Number.isFinite(r.kwh)&&r.ok&&r.kwh>0);} // ignore ok=false and kwh_import=0
+function dedupeReadings(rows){const seen=new Set();return rows.filter(r=>{const key=`${r.ts.toISOString()}|${r.meterKey}|${r.kwh}|${Number.isFinite(r.power_kw)?r.power_kw:''}|${r.matchKey}`;if(seen.has(key))return false;seen.add(key);return true;});}
+function indexByMeter(rows){const m=new Map();rows.forEach(r=>{if(!m.has(r.meterKey))m.set(r.meterKey,[]);m.get(r.meterKey).push(r);state.meterMatchByMeterKey.set(r.meterKey,r.matchKey);});m.forEach(a=>a.sort((x,y)=>x.ts-y.ts));return m;}
+function ensureMeterIds(){const keys=[...new Set(state.allReadings.map(r=>r.meterKey))].sort();let used=new Set([...state.meterIdByMeterKey.values()]),next=1;for(const k of keys){if(!state.meterIdByMeterKey.has(k)){while(used.has(next))next++;state.meterIdByMeterKey.set(k,next);used.add(next);}}}
+function range(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)return null;return{start:new Date(`${s}T00:00:00Z`),end:new Date(`${e}T23:59:59Z`)}}
+function resolveMeta(meterKey){const mk=state.meterMatchByMeterKey.get(meterKey)||meterKey,m=state.mappingByMatchKey.get(mk)||{};return {meter_id:m.id||state.meterIdByMeterKey.get(meterKey)||'',parking_slot:m.slot_code||'UNMAPPED',owner:m.description||'',match_key:mk};}
+function periodPrices(){return {P1:Number($('priceP1').value||0),P2:Number($('priceP2').value||0),P3:Number($('priceP3').value||0),P4:Number($('priceP4').value||0),P5:Number($('priceP5').value||0),P6:Number($('priceP6').value||0)};}
+function periodExcess(){return {P1:Number($('excessP1').value||0),P2:Number($('excessP2').value||0),P3:Number($('excessP3').value||0),P4:Number($('excessP4').value||0),P5:Number($('excessP5').value||0),P6:Number($('excessP6').value||0)};}
+function effectivePeriodPrices(totalPeriods,writeHint=true){
+  const base=periodPrices(),excess=periodExcess(),out={};
+  ['P1','P2','P3','P4','P5','P6'].forEach(p=>{const contrib=(totalPeriods[p]||0)>0?(excess[p]||0)/totalPeriods[p]:0;out[p]=(base[p]||0)+contrib;});
+  if(writeHint) $('invoicePriceHint').textContent=`P1 ${fmt(base.P1)}+${fmt((out.P1-base.P1))}=${fmt(out.P1)} €/kWh | P2 ${fmt(base.P2)}+${fmt((out.P2-base.P2))}=${fmt(out.P2)} €/kWh | P3 ${fmt(base.P3)}+${fmt((out.P3-base.P3))}=${fmt(out.P3)} €/kWh | P4 ${fmt(base.P4)}+${fmt((out.P4-base.P4))}=${fmt(out.P4)} €/kWh | P5 ${fmt(base.P5)}+${fmt((out.P5-base.P5))}=${fmt(out.P5)} €/kWh | P6 ${fmt(base.P6)}+${fmt((out.P6-base.P6))}=${fmt(out.P6)} €/kWh`;
+  return out;
+}
+function easterSunday(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(Date.UTC(y,mo-1,da));}
+function isHoliday(localDate){const y=localDate.getUTCFullYear(),d=localDate.toISOString().slice(0,10),e=easterSunday(y),gf=new Date(e);gf.setUTCDate(e.getUTCDate()-2);return new Set([`${y}-01-01`,`${y}-01-06`,gf.toISOString().slice(0,10),`${y}-05-01`,`${y}-08-15`,`${y}-10-12`,`${y}-11-01`,`${y}-12-06`,`${y}-12-08`,`${y}-12-25`]).has(d);} 
+function madridParts(utc){const s=utc.toLocaleString('sv-SE',{timeZone:TZ,hour12:false});const[d,t]=s.split(' ');const[Y,M,D]=d.split('-').map(Number);const[h]=t.split(':').map(Number);const fake=new Date(Date.UTC(Y,M-1,D,h));return {date:fake,month:M,hour:h,weekday:fake.getUTCDay()};}
+function tariffPeriodAt(utc){const p=madridParts(utc);if(p.weekday===0||p.weekday===6||isHoliday(p.date))return 'P6';const h=p.hour,m=p.month;const map={1:['P6','P6','P6','P6','P6','P6','P6','P6','P2','P2','P1','P1','P1','P1','P2','P2','P2','P2','P1','P1','P1','P1','P2','P2'],2:null,7:null,12:null,3:['P6','P6','P6','P6','P6','P6','P6','P6','P3','P3','P2','P2','P2','P2','P3','P3','P3','P3','P2','P2','P2','P2','P3','P3'],11:null,6:['P6','P6','P6','P6','P6','P6','P6','P6','P4','P4','P3','P3','P3','P3','P4','P4','P4','P4','P3','P3','P3','P3','P4','P4'],8:null,9:null,4:['P6','P6','P6','P6','P6','P6','P6','P6','P5','P5','P4','P4','P4','P4','P5','P5','P5','P5','P4','P4','P4','P4','P5','P5'],5:null,10:null};if(!map[2])map[2]=map[1];if(!map[7])map[7]=map[1];if(!map[12])map[12]=map[1];if(!map[11])map[11]=map[3];if(!map[8])map[8]=map[6];if(!map[9])map[9]=map[6];if(!map[5])map[5]=map[4];if(!map[10])map[10]=map[4];return map[m][h];}
+function allocateDelta(ts0,ts1,delta,slot,outHourly,outPeriods,outDaily){const t0=ts0.getTime(),t1=ts1.getTime();if(!(t1>t0)||delta<=0)return;const total=t1-t0;let cur=t0;while(cur<t1){const d=new Date(cur);d.setUTCMinutes(0,0,0);d.setUTCHours(d.getUTCHours()+1);const edge=Math.min(d.getTime(),t1),share=(edge-cur)/total,part=delta*share,mid=new Date((cur+edge)/2),hour=hourStr(mid),period=tariffPeriodAt(mid),day=dayStr(mid);outHourly.set(`${hour}|${slot}`,(outHourly.get(`${hour}|${slot}`)||0)+part);outPeriods[period]+=part;if(outDaily){if(!outDaily[day])outDaily[day]={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};outDaily[day][period]+=part;outDaily[day].total+=part;}cur=edge;}}
+function computeConsumption(map){state.hourSlotReadings=new Map();const res={meter:new Map(),hourlySlot:new Map()};map.forEach((arr,meterKey)=>{const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0,firstLastDelta:arr.length>=2?Math.max(0,arr[arr.length-1].kwh-arr[0].kwh):0};const slot=resolveMeta(meterKey).parking_slot;for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500){allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,res.hourlySlot,p);p.total+=d;const key=`${hourStr(arr[i].ts)}|${slot}`;if(!state.hourSlotReadings.has(key))state.hourSlotReadings.set(key,[]);state.hourSlotReadings.get(key).push(arr[i]);}}if(p.total>=MIN_KWH)res.meter.set(meterKey,p);});return res;}
+function quarterBucketUtc(ts,graceMin=3){
+  const t=new Date(ts),base=new Date(Date.UTC(t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate(),t.getUTCHours(),0,0,0));
+  const mins=t.getUTCMinutes()+t.getUTCSeconds()/60+t.getUTCMilliseconds()/60000,anchors=[0,15,30,45];
+  let best=anchors[0],bestDiff=Infinity;
+  for(const a of anchors){const d=Math.abs(mins-a);if(d<bestDiff){bestDiff=d;best=a;}}
+  const snap=bestDiff<=graceMin?best:Math.floor(mins/15)*15;
+  base.setUTCMinutes(snap,0,0);
+  return base;
+}
+function maxPower15mDetails(rows){const b=new Map(),bucketRows=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const k=quarterBucketUtc(r.ts,3).toISOString();b.set(k,(b.get(k)||0)+r.power_kw);if(!bucketRows.has(k))bucketRows.set(k,[]);bucketRows.get(k).push(r);});let max=0,maxK='';b.forEach((v,k)=>{if(v>max){max=v;maxK=k;}});const active=[];if(maxK){const byM=new Map();(bucketRows.get(maxK)||[]).forEach(r=>{if(r.power_kw>0.5)byM.set(r.meterKey,(byM.get(r.meterKey)||0)+r.power_kw);});byM.forEach((p,m)=>active.push(`${m}: ${fmt(p)} kW`));}return {max,interval:maxK,active};}
+function maxPowerByPeriod(rows){const b=new Map();rows.forEach(r=>{if(!Number.isFinite(r.power_kw))return;const k=quarterBucketUtc(r.ts,3).toISOString();b.set(k,(b.get(k)||0)+r.power_kw);});const out={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};b.forEach((v,k)=>{const p=tariffPeriodAt(new Date(k));if(v>out[p])out[p]=v;});return out;}
+function fmtMadrid(tsIso){if(!tsIso)return '';return new Date(tsIso).toLocaleString('es-ES',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});}
+function dailyByRowKey(map,rowKey){const out={};map.forEach((arr,m)=>{if(resolveMeta(m).parking_slot!==rowKey)return;const slot=resolveMeta(m).parking_slot;const p={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};for(let i=1;i<arr.length;i++){const d=arr[i].kwh-arr[i-1].kwh;if(d>0&&d<500)allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,out);} });return out;}
+function validationChecks(){
+  const rows=[];
+  state.byMeter.forEach((arr,k)=>{
+    const meta=resolveMeta(k),ip=(meta.match_key||'').split(':')[0];
+    for(let i=1;i<arr.length;i++){
+      const mins=(arr[i].ts-arr[i-1].ts)/60000;
+      if(mins>20){
+        rows.push({
+          meter_id: meta.meter_id || '',
+          ip,
+          parking_slot: meta.parking_slot || 'UNMAPPED',
+          description: meta.owner || '',
+          from: arr[i-1].ts.toISOString(),
+          to: arr[i].ts.toISOString(),
+          gap_min: mins
+        });
+      }
+    }
+  });
+  rows.sort((a,b)=>a.from.localeCompare(b.from));
+  const body=$('validationBody');
+  body.innerHTML=rows.length
+    ? rows.map(r=>`<tr class='warn'><td>${esc(r.meter_id)}</td><td>${esc(r.ip)}</td><td>${esc(r.parking_slot)}</td><td>${esc(r.description)}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td>${fmt(r.gap_min)}</td></tr>`).join('')
+    : `<tr><td colspan='7' class='ok'>✓ No missing intervals detected.</td></tr>`;
+}
+function rebuildFromCache(){const all=[];for(const rows of state.driveRowsByDate.values())all.push(...rows);state.allReadings=dedupeReadings(all).sort((a,b)=>a.ts-b.ts);ensureMeterIds();if(state.allReadings.length){if(!$('filterStart').value)$('filterStart').value=dayStr(state.allReadings[0].ts);if(!$('filterEnd').value)$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);}applyFilterAndRender();renderMappingTable();}
+function applyFilterAndRender(){const r=range();state.filteredReadings=r?state.allReadings.filter(x=>x.ts>=r.start&&x.ts<=r.end):[...state.allReadings];state.byMeter=indexByMeter(state.filteredReadings);renderDashboard();renderSummary();renderReadings();renderInvoiceDailyDetails();validationChecks();}
+function renderDashboard(){const c=computeConsumption(state.byMeter);let total=0;c.meter.forEach(v=>total+=v.total);const hours=[...new Set([...c.hourlySlot.keys()].map(k=>k.split('|')[0]))].sort(),slots=[...new Set([...c.hourlySlot.keys()].map(k=>k.split('|')[1]))].sort();$('kpiRows').textContent=String(state.filteredReadings.length);$('kpiMeters').textContent=String(c.meter.size);$('kpiKwh').textContent=fmt(total);$('kpiHours').textContent=String(hours.length);const mp=maxPower15mDetails(state.filteredReadings);state.lastMaxPower=mp;$('kpiMaxPower').textContent=fmt(mp.max);$('kpiMaxPower').classList.add('kpi-clickable');const byM=new Map();(state.filteredReadings||[]).forEach(r=>{if(mp.interval&&quarterBucketUtc(r.ts,3).toISOString()===mp.interval&&r.power_kw>0.5){const slot=resolveMeta(r.meterKey).parking_slot||r.meterKey;byM.set(slot,(byM.get(slot)||0)+r.power_kw);}});const metersLine=[...byM.entries()].map(([slot,p])=>`${slot}: ${fmt(p)} kW`).join('; ')||'none';const info=mp.interval?`Interval: ${fmtMadrid(mp.interval)} · Active parking slots (>0.5kW): ${metersLine}`:'No interval';$('kpiMaxPower').title=info;$('kpiMaxPowerInfo').textContent=info;const per=maxPowerByPeriod(state.filteredReadings);['P1','P2','P3','P4','P5','P6'].forEach(p=>$(`kpiMax${p}`).textContent=`${fmt(per[p]||0)} kWh`);if(state.chart)state.chart.destroy();if(typeof Chart==='undefined'){ $('chartWarning').textContent='Chart.js not available';return;}const ds=slots.map((s,i)=>({label:s,data:hours.map(h=>c.hourlySlot.get(`${h}|${s}`)||0),backgroundColor:`hsl(${(i*43)%360} 70% 55%)`,stack:'k'}));state.chart=new Chart($('hourlyChart'),{type:'bar',data:{labels:hours,datasets:ds},options:{responsive:true,maintainAspectRatio:false,onClick:(evt,els)=>{if(!els.length)return;const p=els[0],hour=hours[p.index],slot=ds[p.datasetIndex].label;showBucket(hour,slot);},plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});const unmapped=[...c.meter.keys()].filter(k=>resolveMeta(k).parking_slot==='UNMAPPED');$('unmappedValidation').innerHTML=unmapped.length?`<span class='danger'>⚠ ${unmapped.length} active unmapped meter(s): ${unmapped.map(esc).join(', ')}</span>`:`<span class='ok'>✓ No unmapped active meters.</span>`;}
+function showBucket(hour,slot){const key=`${hour}|${slot}`,rows=(state.hourSlotReadings.get(key)||[]).sort((a,b)=>a.ts-b.ts);const groups=new Map();rows.forEach(r=>{const k=`${r.meterKey}|${r.matchKey}`;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);});$('bucketInfo').textContent=`${key} • readings: ${rows.length} • keys: ${groups.size} (expected 4 per key if no missing data)`;$('bucketBody').innerHTML=rows.length?[...groups.entries()].map(([k,arr])=>{const header=`<tr><td colspan='5' class='muted'><b>${esc(k)}</b> (${arr.length} rows)</td></tr>`;return header+arr.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${Number.isFinite(r.power_kw)?fmt(r.power_kw):''}</td><td>${fmt(r.kwh)}</td></tr>`).join('');}).join(''):`<tr><td colspan='5' class='muted'>No readings</td></tr>`;}
+function renderSummary(){const c=computeConsumption(state.byMeter),rows=[...c.meter.entries()].map(([k,p])=>({meterKey:k,...p,...resolveMeta(k)})).sort((a,b)=>b.total-a.total);$('topMeters').innerHTML=rows.length?rows.map(r=>{const ok=Math.abs(r.total-r.firstLastDelta)<=0.05,diff=r.total-r.firstLastDelta;return `<tr><td>${r.meter_id}</td><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td class='${ok?'ok':'warn'}'>${ok?'✓':'Δ'} ${fmt(diff)}</td></tr>`;}).join(''):`<tr><td colspan='11' class='muted'>No data</td></tr>`;}
+
+function renderReadings(){const rows=[...state.filteredReadings].sort((a,b)=>b.ts-a.ts).slice(0,state.readingsLimit);$('readingsBody').innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.tsStr)}</td><td>${esc(r.meterKey)}</td><td>${esc(r.matchKey)}</td><td>${Number.isFinite(r.volt_v)?fmt(r.volt_v):''}</td><td>${Number.isFinite(r.current_a)?fmt(r.current_a):''}</td><td>${Number.isFinite(r.power_kw)?fmt(r.power_kw):''}</td><td>${fmt(r.kwh)}</td><td>${r.ok}</td></tr>`).join(''):`<tr><td colspan='8' class='muted'>No data</td></tr>`;}
+function getMappedSlotsMeta(){const bySlot=new Map(),dups=[];for(const [matchKey,m] of state.mappingByMatchKey.entries()){const slot=(m.slot_code||'').trim();if(!slot)continue;const row={rowKey:slot,meter_id:Number(m.id||0)||'',meterKey:matchKey,parking_slot:slot,owner:m.description||''};if(bySlot.has(slot)){dups.push(`${slot}: ${bySlot.get(slot).meterKey} / ${matchKey}`);const prev=bySlot.get(slot);if((row.meter_id||Infinity)<(prev.meter_id||Infinity))bySlot.set(slot,row);}else bySlot.set(slot,row);}if(dups.length)setStatus(`WARNING: duplicate parking_slot mapping detected (${dups.length}). Using one mapping per slot. ${dups.slice(0,3).join('; ')}`);return [...bySlot.values()].sort((a,b)=>String(a.parking_slot).localeCompare(String(b.parking_slot)));}
+function computeSlotPeriods(byMeter){
+  const out=new Map();
+  byMeter.forEach((arr,meterKey)=>{
+    const meta=resolveMeta(meterKey),rowKey=meta.parking_slot,slot=meta.parking_slot;
+    if(!slot || slot==='UNMAPPED' || !rowKey) return;
+    if(!out.has(rowKey)) out.set(rowKey,{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0});
+    const p=out.get(rowKey);
+    for(let i=1;i<arr.length;i++){
+      const d=arr[i].kwh-arr[i-1].kwh;
+      if(d>0&&d<500){
+        allocateDelta(arr[i-1].ts,arr[i].ts,d,slot,new Map(),p,null);
+        p.total+=d;
+      }
+    }
+  });
+  return out;
+}
+function computeSlotBoundaries(byMeter){
+  const out=new Map();
+  byMeter.forEach((arr,meterKey)=>{
+    const meta=resolveMeta(meterKey),rowKey=meta.parking_slot,slot=meta.parking_slot;
+    if(!slot || slot==='UNMAPPED' || !arr.length || !rowKey) return;
+    if(!out.has(rowKey)) out.set(rowKey,{start:0,end:0});
+    const b=out.get(rowKey);
+    b.start += Number(arr[0].kwh||0);
+    b.end += Number(arr[arr.length-1].kwh||0);
+  });
+  return out;
+}
+function getInvoiceMonthRows(){
+  const m=$('invoiceMonth').value;
+  if(!m) return [];
+  const [y,mo]=m.split('-').map(Number),s=new Date(Date.UTC(y,mo-1,1)),e=new Date(Date.UTC(y,mo,1));
+  return state.filteredReadings.filter(r=>r.ts>=s&&r.ts<e);
+}
+function buildInvoices(){
+  const m=$('invoiceMonth').value;
+  if(!m) return alert('Select month');
+  const by=indexByMeter(getInvoiceMonthRows());
+  const slotPeriods=computeSlotPeriods(by),slotBounds=computeSlotBoundaries(by),cap=Number($('capacityFee').value||0),adm=Number($('adminFee').value||0);
+  const totalPeriods={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};
+  slotPeriods.forEach(p=>{['P1','P2','P3','P4','P5','P6'].forEach(k=>totalPeriods[k]+=Number(p[k]||0));});
+  const pp=effectivePeriodPrices(totalPeriods);
+  const slots=getMappedSlotsMeta();
+  const divisor=Math.max(slots.length,1),capPer=cap/divisor,admPer=adm/divisor;
+  state.invoiceRows=slots.map(meta=>{
+    const p=slotPeriods.get(meta.rowKey)||{P1:0,P2:0,P3:0,P4:0,P5:0,P6:0,total:0};
+    const b=slotBounds.get(meta.rowKey)||{start:0,end:0};
+    const energyE=p.P1*pp.P1+p.P2*pp.P2+p.P3*pp.P3+p.P4*pp.P4+p.P5*pp.P5+p.P6*pp.P6;
+    const totalE=energyE+capPer+admPer;
+    return {rowKey:meta.rowKey,meter_id:meta.meter_id,meterKey:meta.meterKey,parking_slot:meta.parking_slot,startKwh:b.start,endKwh:b.end,...p,energyE,capacityE:capPer,adminE:admPer,totalE};
+  });
+  $('invoiceBody').innerHTML=state.invoiceRows.length
+    ? state.invoiceRows.map(r=>{const eurPerKwh=r.total>0?r.energyE/r.total:0;return `<tr data-m='${esc(r.rowKey)}' class='${state.selectedInvoiceMeterKey===r.rowKey?'selected':''}'><td>${esc(r.meterKey)}</td><td>${esc(r.parking_slot)}</td><td>${fmt(r.startKwh)}</td><td>${fmt(r.endKwh)}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td>€ ${fmt(r.energyE)}</td><td>€ ${fmt(r.capacityE)}</td><td>€ ${fmt(r.adminE)}</td><td class='total-eur-col'>€ ${fmt(r.totalE)}<span class='eur-kwh-note'>€/kWh: ${fmt(eurPerKwh)}</span></td></tr>`;}).join('')
+    : `<tr><td colspan='15' class='muted'>No rows</td></tr>`;
+  document.querySelectorAll('#invoiceBody tr[data-m]').forEach(tr=>tr.addEventListener('click',()=>{state.selectedInvoiceMeterKey=tr.getAttribute('data-m');buildInvoices();renderInvoiceDailyDetails();}));
+  if(!state.selectedInvoiceMeterKey&&state.invoiceRows.length){state.selectedInvoiceMeterKey=state.invoiceRows[0].rowKey;buildInvoices();return;}
+  renderInvoiceDailyDetails();
+}
+function renderInvoiceDailyDetails(){
+  const body=$('invoiceDailyBody');
+  if(!body) return;
+  if(!state.selectedInvoiceMeterKey){$('invoiceDailyInfo').textContent='Select an invoice summary row.';body.innerHTML='<tr><td colspan=\"9\" class=\"muted\">No selection</td></tr>';return;}
+  const selected=state.invoiceRows.find(r=>r.rowKey===state.selectedInvoiceMeterKey),slot=selected?selected.parking_slot:state.selectedInvoiceMeterKey;
+  const m=$('invoiceMonth').value;if(!m){body.innerHTML='';return;}
+  const by=indexByMeter(getInvoiceMonthRows());
+  const slotPeriods=computeSlotPeriods(by),totalPeriods={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};
+  slotPeriods.forEach(p=>{['P1','P2','P3','P4','P5','P6'].forEach(k=>totalPeriods[k]+=Number(p[k]||0));});
+  const daily=dailyByRowKey(by,state.selectedInvoiceMeterKey),pp=effectivePeriodPrices(totalPeriods),days=Object.keys(daily).sort();
+  $('invoiceDailyInfo').textContent=`Parking slot: ${slot} (${state.selectedInvoiceMeterKey})`;
+  body.innerHTML=days.length
+    ? days.map(d=>{const r=daily[d],cost=r.P1*pp.P1+r.P2*pp.P2+r.P3*pp.P3+r.P4*pp.P4+r.P5*pp.P5+r.P6*pp.P6;return `<tr><td>${d}</td><td class='${zero(r.P1)}'>${fmt(r.P1)}</td><td class='${zero(r.P2)}'>${fmt(r.P2)}</td><td class='${zero(r.P3)}'>${fmt(r.P3)}</td><td class='${zero(r.P4)}'>${fmt(r.P4)}</td><td class='${zero(r.P5)}'>${fmt(r.P5)}</td><td class='${zero(r.P6)}'>${fmt(r.P6)}</td><td>${fmt(r.total)}</td><td>${fmt(cost)}</td></tr>`;}).join('')
+    : `<tr><td colspan='9' class='muted'>No daily data</td></tr>`;
+}
+function exportInvoices(){if(!state.invoiceRows.length)return alert('Calculate invoice first');const lines=['meter_id,meter_key,parking_slot,P1,P2,P3,P4,P5,P6,total_kwh,energy_eur,capacity_eur,admin_eur,total_eur',...state.invoiceRows.map(r=>`${r.meter_id},"${r.meterKey}","${r.parking_slot}",${fmt(r.P1)},${fmt(r.P2)},${fmt(r.P3)},${fmt(r.P4)},${fmt(r.P5)},${fmt(r.P6)},${fmt(r.total)},${fmt(r.energyE)},${fmt(r.capacityE)},${fmt(r.adminE)},${fmt(r.totalE)}`)];download('invoices.csv',lines.join('\n'));}
+function miniBarSvg(daily){
+  const days=Object.keys(daily).sort(); if(!days.length) return '';
+  const colors={P1:'#d94848',P2:'#f59e0b',P3:'#facc15',P4:'#16a34a',P5:'#0891b2',P6:'#2563eb'};
+  const max=Math.max(...days.map(d=>daily[d].total||0),1),w=520,h=210,p=30,bw=Math.max(2,Math.floor((w-p*2)/days.length)-1);
+  let x=p+1,bars='';
+  days.forEach((d,i)=>{let y=h-p;['P1','P2','P3','P4','P5','P6'].forEach(k=>{const v=daily[d][k]||0;const bh=Math.round((v/max)*(h-p*2));if(bh>0){y-=bh;bars+=`<rect x='${x}' y='${y}' width='${bw}' height='${bh}' fill='${colors[k]}'/>`;}});if(i%Math.max(1,Math.floor(days.length/8))===0)bars+=`<text x='${x}' y='${h-6}' font-size='8' fill='#334155'>${d.slice(8)}/${d.slice(5,7)}</text>`;x+=bw+1;});
+  const legend=['P1','P2','P3','P4','P5','P6'].map((k,i)=>`<rect x='${p+i*52}' y='6' width='10' height='10' fill='${colors[k]}'/><text x='${p+13+i*52}' y='15' font-size='9' fill='#334155'>${k}</text>`).join('');
+  const grid=[0.25,0.5,0.75,1].map(r=>{const y=(h-p)-Math.round((h-p*2)*r);return `<line x1='${p}' y1='${y}' x2='${w-p}' y2='${y}' stroke='#e2e8f0'/><text x='${p-24}' y='${y+3}' font-size='8' fill='#64748b'>${fmt(max*r)}</text>`;}).join('');
+  return `<svg width='100%' height='210' viewBox='0 0 ${w} ${h}'><rect x='0' y='0' width='${w}' height='${h}' fill='#ffffff' stroke='#cbd5e1'/>${legend}${grid}<line x1='${p}' y1='${h-p}' x2='${w-p}' y2='${h-p}' stroke='#64748b'/><line x1='${p}' y1='${p}' x2='${p}' y2='${h-p}' stroke='#64748b'/><text x='2' y='14' font-size='9' fill='#334155'>kWh</text><text x='${p-12}' y='${h-p+4}' font-size='9' fill='#334155'>0</text>${bars}</svg>`;
+}
+function slotIdentity(by,rowKey){
+  for(const [meterKey,arr] of by.entries()){
+    if(resolveMeta(meterKey).parking_slot!==rowKey) continue;
+    const uid=meterKey.startsWith('uid:')?meterKey.slice(4):'';
+    const m=resolveMeta(meterKey),match=m.match_key||'',ip=match.split('|')[0]||'',unit=match.split('|')[1]||'';
+    return {uid,gateway:ip,meterId:m.meter_id||'',unit};
+  }
+  return {uid:'',gateway:'',meterId:'',unit:''};
+}
+function printInvoicePdfAllSlots(){
+  if(!state.invoiceRows.length) buildInvoices();
+  if(!state.invoiceRows.length) return alert('Calculate invoice first');
+  const by=indexByMeter(getInvoiceMonthRows());
+  const slotPeriods=computeSlotPeriods(by),totalPeriods={P1:0,P2:0,P3:0,P4:0,P5:0,P6:0};
+  slotPeriods.forEach(p=>{['P1','P2','P3','P4','P5','P6'].forEach(k=>totalPeriods[k]+=Number(p[k]||0));});
+  const pp=effectivePeriodPrices(totalPeriods,false);
+  const excess=periodExcess();
+  const frame=`${$('filterStart').value||''} → ${$('filterEnd').value||''}`;
+  const pages=state.invoiceRows.map(r=>{
+    const id=slotIdentity(by,r.rowKey);
+    const daily=dailyByRowKey(by,r.rowKey),days=Object.keys(daily).sort();
+    const rows=days.map(d=>{const v=daily[d],cost=v.P1*pp.P1+v.P2*pp.P2+v.P3*pp.P3+v.P4*pp.P4+v.P5*pp.P5+v.P6*pp.P6;return `<tr><td>${d}</td><td>${fmt(v.P1)}</td><td>${fmt(v.P2)}</td><td>${fmt(v.P3)}</td><td>${fmt(v.P4)}</td><td>${fmt(v.P5)}</td><td>${fmt(v.P6)}</td><td>${fmt(v.total)}</td><td>${fmt(cost)} €</td></tr>`;}).join('');
+    const avg=r.total>0?r.totalE/r.total:0;
+    return `<section class='page'><h2>Invoice · ${esc(r.parking_slot)}</h2><table class='head-table'><tr class='period-row'><th>Billing period</th><td colspan='5'>${frame}</td></tr><tr><th>UID</th><td>${esc(id.uid||'-')}</td><th>Gateway IP</th><td>${esc(id.gateway||'-')}</td><th>Meter ID</th><td>${esc(id.meterId||'-')}</td></tr><tr><th>Start kWh</th><td>${fmt(r.startKwh)}</td><th>End kWh</th><td>${fmt(r.endKwh)}</td><th>Total €</th><td>${fmt(r.totalE)} €</td></tr></table><table class='period-table'><thead><tr><th></th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th></tr></thead><tbody><tr><th>kWh</th><td>${fmt(r.P1)}</td><td>${fmt(r.P2)}</td><td>${fmt(r.P3)}</td><td>${fmt(r.P4)}</td><td>${fmt(r.P5)}</td><td>${fmt(r.P6)}</td></tr><tr class='price-row'><th>€/kWh</th><td>${fmt(pp.P1)}</td><td>${fmt(pp.P2)}</td><td>${fmt(pp.P3)}</td><td>${fmt(pp.P4)}</td><td>${fmt(pp.P5)}</td><td>${fmt(pp.P6)}</td></tr></tbody></table><div class='kpis'><div class='kpi'>Energy kWh<br><b>${fmt(r.total)}</b></div><div class='kpi'>Energy €<br><b>${fmt(r.energyE)} €</b></div><div class='kpi'>Average €/kWh<br><b>${fmt(avg)}</b></div></div><div class='chart-tile'><h3>Daily consumption stacked by tariff period (kWh)</h3>${miniBarSvg(daily)}</div><table class='daily'><thead><tr><th>Day</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Total kWh</th><th>Daily Cost</th></tr></thead><tbody>${rows||"<tr><td colspan='9'>No daily data</td></tr>"}</tbody></table><p class='tip'>Excess contribution (€): P1 ${fmt(excess.P1)} / P2 ${fmt(excess.P2)} / P3 ${fmt(excess.P3)} / P4 ${fmt(excess.P4)} / P5 ${fmt(excess.P5)} / P6 ${fmt(excess.P6)} · Effective price calculation: base price + (excess € / period kWh).</p><p class='tip'><b>Tariff Period Definition, 3.0 TD:</b> https://www.energigreen.com/tarifas-electricidad/tarifa-3-0td/ · Recommendation: Schedule EV charging during cheaper periods and reduce charging power during expensive periods to minimize excess-power costs.</p></section>`;
+  }).join('');
+  const w=window.open('','_blank'); if(!w) return alert('Pop-up blocked');
+  w.document.write(`<!doctype html><html><head><meta charset='utf-8'><title>Invoice PDF</title><style>@page{size:A4 portrait;margin:10mm}body{font-family:'Inter','Segoe UI',Arial,sans-serif;margin:0;color:#0f172a;background:#fff}.page{page-break-after:always;padding:4mm 2mm}.page:last-child{page-break-after:auto}table{width:100%;border-collapse:collapse;margin-bottom:6px}th,td{border:1px solid #cbd5e1;padding:3px 5px;font-size:10px;text-align:left;line-height:1.2}th{background:#e2f4dc;color:#14532d}.period-row th,.period-row td,.price-row th,.price-row td{background:#f0fdf4}.period-table th{background:#ecfeff;color:#155e75}.kpis{display:flex;gap:6px;margin:4px 0 6px}.kpi{flex:1;border:1px solid #bbf7d0;background:#f0fdf4;padding:4px 6px;font-size:10px}.kpi b{font-size:13px;color:#166534}.chart-tile{border:1px solid #cbd5e1;background:#fff;padding:6px;margin:6px 0}.chart-tile h3{margin:0 0 4px;font-size:12px;color:#166534}.daily th{background:#f8fafc}.tip{font-size:9px;color:#334155;margin-top:4px}h2{margin:0 0 6px;font-size:16px;color:#166534}</style></head><body>${pages}</body></html>`);
+  w.document.close(); w.focus(); w.print();
+}
+function download(n,t){const b=new Blob([t],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;a.click();URL.revokeObjectURL(a.href)}
+async function driveReq(url){try{const r=await fetch(url);if(!r.ok)throw new Error(`${r.status} ${await r.text()}`);return r;}catch(e){if(String(e).includes('Failed to fetch'))throw new Error('Drive: Failed to fetch. Use http://localhost (not file://), verify CORS/network and API key.');throw e;}}
+async function findFilesForDay(d){if(state.driveFilesByDate.has(d))return state.driveFilesByDate.get(d);const folder=$('folderId').value.trim(),api=$('apiKey').value.trim(),tag=`readings_${noDash(d)}`;let url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folder}' in parents and trashed=false and name contains '${tag}'`)}&fields=files(id,name)&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true`;if(api)url+=`&key=${encodeURIComponent(api)}`;const files=(await (await driveReq(url)).json()).files||[];const f=files.filter(x=>/^readings_\d{8}.*\.csv$/i.test(x.name));state.driveFilesByDate.set(d,f);return f;}
+async function dlFile(f){const api=$('apiKey').value.trim();let url=`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}?alt=media&supportsAllDrives=true`;if(api)url+=`&key=${encodeURIComponent(api)}`;return await (await driveReq(url)).text();}
+async function loadPeriod(){const s=$('filterStart').value,e=$('filterEnd').value;if(!s||!e)throw new Error('select start/end');if(s>e)throw new Error('start>end');const days=enumDays(s,e),missing=days.filter(d=>!state.driveRowsByDate.has(d));if(!missing.length){setStatus(`No missing files for ${s}..${e}.`);applyFilterAndRender();return;}setStatus(`Missing days ${missing.length}/${days.length}. Querying Drive...`);for(const d of missing){const files=await findFilesForDay(d);let rows=[];for(const f of files)rows.push(...normalizeRows(parseCsv(await dlFile(f))));state.driveRowsByDate.set(d,rows);}rebuildFromCache();setStatus(`Loaded ${s}..${e}. Cached days: ${state.driveRowsByDate.size}.`);} 
+async function loadLocal(){const fs=[...($('localFiles').files||[])].filter(f=>/^readings_\d{8}.*\.csv$/i.test(f.name));if(!fs.length)return alert('Select files');for(const f of fs){const rows=normalizeRows(parseCsv(await f.text()));if(!rows.length)continue;const d=dayStr(rows[0].ts),merged=(state.driveRowsByDate.get(d)||[]).concat(rows);state.driveRowsByDate.set(d,dedupeReadings(merged));}rebuildFromCache();setStatus(`Loaded ${fs.length} local files (deduplicated).`);} 
+const STD_MAPPING=`id,gateway_id,gateway_ip,port,unit_id,slot_code,description,status\n1,1,192.168.1.101,502,1,P246,Nacho,Activo\n2,1,192.168.1.101,502,2,P154,Oscar,Activo\n3,1,192.168.1.101,502,3,P133,Asterio,Activo\n4,1,192.168.1.101,502,4,P205,Jose,Activo\n5,1,192.168.1.101,502,5,P131,José Maria,Activo\n6,1,192.168.1.101,502,6,P131,Valle,Activo\n7,4,192.168.1.104,502,24,P318,Arancha,Activo\n8,4,192.168.1.104,502,25,P361,Ben,Activo\n9,2,192.168.1.102,502,2,P302,Carlos,Activo\n97,1,192.168.1.101,502,7,P120,Angel,Activo\n98,1,192.168.1.101,502,8,P228,Marta,Activo\n99,1,192.168.1.101,502,9,P229,Jimena,Activo`;
+function importMappingRows(rows,{replace=true}={}){if(replace)state.mappingByMatchKey=new Map();rows.forEach(r=>{const id=Number(r.id||0),ip=(r.gateway_ip||r.gateway_host||'').split(':')[0],port=String(r.port||r.gateway_port||'502'),u=String(r.unit_id||'');if(!ip||!u)return;state.mappingByMatchKey.set(`${ip}:${port}|${u}`,{id,slot_code:r.slot_code||'',description:r.description||'',status:r.status||'Activo'});});renderMappingTable();}
+function clearMappings({clearLocal=true}={}){state.mappingByMatchKey=new Map();if(clearLocal)localStorage.removeItem(MAP_KEY);renderMappingTable();setStatus('Mappings cleared.');}
+function renderMappingTable(){const keys=[...state.mappingByMatchKey.keys()].sort();$('mappingBody').innerHTML=keys.length?keys.map(k=>{const m=state.mappingByMatchKey.get(k)||{};return `<tr data-k="${esc(k)}"><td>${m.id||''}</td><td>${esc(k)}</td><td><input data-f="slot_code" value="${esc(m.slot_code||'')}"></td><td><input data-f="description" value="${esc(m.description||'')}"></td><td><select data-f="status"><option ${m.status==='Activo'?'selected':''}>Activo</option><option ${m.status==='Inactivo'?'selected':''}>Inactivo</option></select></td></tr>`;}).join(''):`<tr><td colspan='5' class='muted'>No mappings</td></tr>`;$('mappingBody').querySelectorAll('tr[data-k]').forEach(tr=>{const k=tr.getAttribute('data-k');tr.querySelectorAll('input,select').forEach(inp=>inp.addEventListener('change',()=>{const f=inp.getAttribute('data-f');const cur=state.mappingByMatchKey.get(k)||{};cur[f]=inp.value;state.mappingByMatchKey.set(k,cur);}));});}
+function saveMapping(){localStorage.setItem(MAP_KEY,JSON.stringify(Object.fromEntries(state.mappingByMatchKey.entries())));setStatus('Mapping saved locally.');}
+function loadMapping(){try{const raw=localStorage.getItem(MAP_KEY);if(raw)state.mappingByMatchKey=new Map(Object.entries(JSON.parse(raw)));}catch(_){}}
+function exportMapping(){const lines=['id,match_key,slot_code,description,status'];for(const [k,m] of state.mappingByMatchKey.entries())lines.push(`${m.id||''},"${k}","${m.slot_code||''}","${m.description||''}","${m.status||''}"`);download('local_mapping.csv',lines.join('\n'));}
+async function loadStdMapping(){try{const txt=await (await fetch('../data/local_standard_mapping.csv')).text();importMappingRows(parseCsv(txt),{replace:true});setStatus('Standard mapping loaded from file.');}catch{importMappingRows(parseCsv(STD_MAPPING),{replace:true});setStatus('Standard mapping loaded from embedded fallback.');}}
+function switchView(v){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.view===v));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${v}`));}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
+$('btnLoadDrivePeriod').addEventListener('click',()=>loadPeriod().catch(e=>setStatus(`ERROR: ${e.message||e}`)));$('btnApplyFilter').addEventListener('click',applyFilterAndRender);$('btnResetFilter').addEventListener('click',()=>{if(!state.allReadings.length)return;$('filterStart').value=dayStr(state.allReadings[0].ts);$('filterEnd').value=dayStr(state.allReadings[state.allReadings.length-1].ts);applyFilterAndRender();});$('btnLoadLocal').addEventListener('click',()=>loadLocal().catch(e=>setStatus(`ERROR: ${e.message||e}`)));$('btnClearData').addEventListener('click',()=>{state.allReadings=[];state.filteredReadings=[];state.driveRowsByDate.clear();state.driveFilesByDate.clear();state.readingsLimit=1000;applyFilterAndRender();setStatus('Cache cleared');});$('btnBuildInvoice').addEventListener('click',buildInvoices);$('btnExportCsv').addEventListener('click',exportInvoices);$('btnPrintInvoicePdf').addEventListener('click',printInvoicePdfAllSlots);$('btnLoadRepoMapping').addEventListener('click',()=>loadStdMapping());$('btnLoadStdMap').addEventListener('click',()=>loadStdMapping());$('btnImportMapping').addEventListener('click',async()=>{const f=$('mappingFile').files?.[0];if(!f)return alert('Choose mapping CSV');importMappingRows(parseCsv(await f.text()),{replace:true});setStatus('Mapping imported (replaced existing entries).');});$('btnClearMappings').addEventListener('click',()=>clearMappings({clearLocal:true}));$('btnSaveMapping').addEventListener('click',saveMapping);$('btnExportMapping').addEventListener('click',exportMapping);$('btnMoreReadings').addEventListener('click',()=>{state.readingsLimit+=1000;renderReadings();});$('langSwitch').addEventListener('change',e=>{state.lang=e.target.value;applyLang();});
+$('kpiMaxPower').addEventListener('click',()=>{const info=$('kpiMaxPowerInfo').textContent||'No interval';$('maxPowerModalInterval').textContent=info.split(' · ')[0]||info;$('maxPowerModalMeters').textContent=info.split(' · ')[1]||'';$('maxPowerModal').classList.add('open');});
+$('btnCloseMaxPowerModal').addEventListener('click',()=>$('maxPowerModal').classList.remove('open'));
+$('maxPowerModal').addEventListener('click',e=>{if(e.target.id==='maxPowerModal')$('maxPowerModal').classList.remove('open');});
+$('invoiceMonth').value=new Date().toISOString().slice(0,7);loadMapping();loadStdMapping();applyLang();
+</script>
+</body></html>
