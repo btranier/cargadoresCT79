@@ -11,4 +11,4 @@ id,match_key,slot_code,description,status
 10,192.168.1.101:502|7,P120,Angel,Activo
 11,192.168.1.101:502|8,P228,Marta,Activo
 12,192.168.1.101:502|9,P229,Jimena,Activo
-13,192.168.1.102:502|1,P232,Jesus,Activo
+13,192.168.1.102:502|3,P232,Jesus,Activo
