@@ -1,0 +1,14 @@
+id,match_key,slot_code,description,status
+1,192.168.1.101:502|1,P246,Nacho,Activo
+2,192.168.1.101:502|2,P154,Oscar,Activo
+3,192.168.1.101:502|3,P133,Asterio,Activo
+4,192.168.1.101:502|4,P205,Jose,Activo
+5,192.168.1.101:502|5,P131,José Maria,Activo
+6,192.168.1.101:502|6,P150,Valle,Activo
+7,192.168.1.104:502|24,P318,Arancha,Activo
+8,192.168.1.104:502|25,P361,Ben,Activo
+9,192.168.1.102:502|2,P302,Carlos,Activo
+10,192.168.1.101:502|7,P120,Angel,Activo
+11,192.168.1.101:502|8,P228,Marta,Activo
+12,192.168.1.101:502|9,P229,Jimena,Activo
+13,192.168.1.102:502|3,P232,Jesus,Activo
