@@ -8,17 +8,23 @@ set -euo pipefail
 
 CSV_PATH="${1:-readings_20260201.csv}"
 DB_PATH="${DB_PATH:-./data/saci.db}"
+MAPPING_CSV="${MAPPING_CSV:-./data/active_mapping.csv}"
 
 if [[ ! -f "$CSV_PATH" ]]; then
   echo "❌ CSV file not found: $CSV_PATH"
   exit 1
 fi
 
+if [[ ! -f "$MAPPING_CSV" ]]; then
+  echo "❌ Mapping CSV file not found: $MAPPING_CSV"
+  exit 1
+fi
+
 export DATABASE_URL="sqlite:///$DB_PATH"
 export PYTHONPATH="${PYTHONPATH:-.}"
 
-echo "➡️  Importing '$CSV_PATH' into '$DB_PATH'..."
-python -m backend.import_readings_csv "$CSV_PATH"
+echo "➡️  Importing '$CSV_PATH' into '$DB_PATH' using mapping '$MAPPING_CSV'..."
+python -m backend.import_readings_csv "$CSV_PATH" --mapping-csv "$MAPPING_CSV"
 
 echo "✅ Done. Quick DB check:"
 python - <<'PY'
@@ -30,6 +36,8 @@ con = sqlite3.connect(db)
 cur = con.cursor()
 for q, label in [
     ("select count(*) from gateways", "gateways"),
+    ("select count(*) from meters", "meters"),
+    ("select count(*) from meters where is_active=1", "meters_active"),
     ("select count(*) from readings", "readings"),
     ("select count(*) from readings where ok=1", "readings_ok"),
 ]:

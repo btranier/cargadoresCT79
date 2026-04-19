@@ -79,10 +79,15 @@ cd /ruta/a/cargadoresCT79
 ./import_readings.sh readings_20260201.csv
 ```
 
-Opcionalmente, para otro destino de DB:
+Este flujo:
+- crea/reutiliza gateways detectados en lecturas + mapping,
+- precarga **32 medidores por gateway** (unit_id 1..32),
+- aplica el mapping activo desde `data/active_mapping.csv`.
+
+Opcionalmente, para otro destino de DB o mapping:
 
 ```bash
-DB_PATH=./data/saci.db ./import_readings.sh readings_20260201.csv
+DB_PATH=./data/saci.db MAPPING_CSV=./data/active_mapping.csv ./import_readings.sh readings_20260201.csv
 ```
 
 También disponible como `make`:
